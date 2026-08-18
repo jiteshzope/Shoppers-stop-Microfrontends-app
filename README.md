@@ -1,96 +1,122 @@
-# EcommerceMf
+# Ecommerce MF
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An Angular micro-frontend storefront ("Shoppers Stop") built on Nx and Module Federation,
+backed by an Express + PostgreSQL API.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+| Project   | Type                       | Dev port | Description                                  |
+| --------- | -------------------------- | -------- | -------------------------------------------- |
+| `shell`   | Module Federation host     | 4200     | Header, routing, session and cart-count state |
+| `product` | Remote                     | 4201     | Catalog list and product details              |
+| `cart`    | Remote                     | 4202     | Cart contents and quantity changes            |
+| `auth`    | Remote                     | 4203     | Login and registration                        |
+| `session` | Library (`@ecommerce-mf/session`) | –  | Contracts shared by the shell and remotes     |
+| `api`     | Express service            | 3000     | REST API over PostgreSQL                      |
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
-
-## Run tasks
-
-To run tasks with Nx use:
-
-```sh
-npx nx <target> <project-name>
-```
-
-For example:
+## Running locally
 
 ```sh
-npx nx build myproject
+# 1. Database
+docker compose up -d postgres
+
+# 2. API — creates the schema and seeds the catalog on boot
+npx nx serve api
+
+# 3. Storefront — the host also serves the three remotes
+npx nx run shell:serve
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+The app is then on <http://localhost:4200> and the API on <http://localhost:3000>.
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Copy `api/.env.example` to `api/.env` to override any setting; every variable is
+documented there. If port 3000 or 5432 is already taken, set `PORT` / `DATABASE_URL`
+accordingly and update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
 
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
-```
-
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
-
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
-
-# Generate a library
-npx nx g @nx/react:lib some-lib
-```
-
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
-
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
+### Checks
 
 ```sh
-npx nx connect
+npx nx run-many -t lint
+npx nx run-many -t test
+npx nx e2e shell-e2e          # Playwright; starts the shell dev server itself
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+The e2e suite talks to a real API, so keep the database and `nx serve api` running.
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Authentication
 
-### Step 2
+The session credential never reaches JavaScript.
 
-Use the following command to configure a CI workflow for your workspace:
+- On login or registration the API issues an opaque random session token, stores only its
+  SHA-256 digest in `sessions`, and returns it in an **`httpOnly`** cookie. Nothing is kept
+  in `localStorage`, `sessionStorage`, or application state, so an injected script has
+  nothing to steal.
+- Because the browser attaches that cookie automatically, every state-changing request must
+  also carry the per-session CSRF token in an `X-CSRF-Token` header. The token is delivered
+  in a second, readable cookie; a cross-site page can trigger a request but cannot read the
+  cookie to fill in the header. `apiSessionInterceptor` adds it on the client, and
+  `verifyCsrfToken` checks it (in constant time) on the server.
+- That readable CSRF cookie doubles as a non-secret "session present" hint, which lets the
+  SPA skip pointless calls and redirect guests without ever holding a credential.
+  `GET /api/v1/auth/session` remains the only authority on whether a session is valid, and
+  is what the app uses to rehydrate after a reload.
 
-```sh
-npx nx g ci-workflow
+Set `COOKIE_SECURE=true` (and `COOKIE_SAME_SITE` if the API is on a different site than the
+storefront) whenever the API is served over HTTPS.
+
+## API layout
+
+`api/src` is organised by layer, with each feature owning its full slice:
+
+```
+api/src
+├── main.ts                  bootstrap: migrations, listen, graceful shutdown
+├── app.ts                   express wiring (CORS, parsers, routers, error handling)
+├── routes.ts                /api/v1 router aggregation
+├── config/environment.ts    validated, typed configuration read once at startup
+├── database/                pool, migration runner, schema and seed scripts
+├── middleware/              authenticate, CSRF, 404 and error handlers
+├── shared/                  HttpError, async handler, parsing, logging
+└── modules/
+    ├── auth/                routes → controller → service → repository (+ validator, cookies)
+    ├── catalog/             routes → controller → service → repository
+    ├── cart/                routes → controller → service → repository (+ validator)
+    └── health/              readiness probe
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Controllers only translate HTTP to and from the services; services hold the business rules;
+repositories own the SQL. Handlers throw `HttpError`, and a single error middleware turns
+those into a status plus a stable error code (`INVALID_CREDENTIALS`, `EMAIL_IN_USE`, …) that
+the front end maps to user-facing copy. Unexpected failures are logged in full and reported
+as a generic 500.
 
-## Install Nx Console
+### Endpoints
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+| Method | Path                            | Auth        | Purpose                     |
+| ------ | ------------------------------- | ----------- | --------------------------- |
+| GET    | `/health`                       | –           | Readiness probe             |
+| POST   | `/api/v1/auth/register`         | –           | Create an account           |
+| POST   | `/api/v1/auth/login`            | –           | Start a session             |
+| GET    | `/api/v1/auth/session`          | cookie      | Resolve the signed-in user  |
+| POST   | `/api/v1/auth/logout`           | cookie+CSRF | Revoke the session          |
+| GET    | `/api/v1/catalog/products`      | –           | Catalog list                |
+| GET    | `/api/v1/catalog/products/:id`  | –           | Product details             |
+| GET    | `/api/v1/cart`                  | cookie      | Cart contents               |
+| POST   | `/api/v1/cart/items`            | cookie+CSRF | Add quantity to the cart    |
+| POST   | `/api/v1/cart/items/remove`     | cookie+CSRF | Remove quantity from the cart |
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Shell ↔ remote communication
 
-## Useful links
+Remotes never import each other. They exchange typed events over injected channels
+(`AUTH_SHELL_CHANNEL`, `CART_SHELL_CHANNEL`, `PRODUCT_SHELL_CHANNEL`) declared in
+`libs/session`; the shell provides the implementations. Each channel token is injected as
+`{ optional: true }` so every remote still runs standalone.
 
-Learn more:
+## Deployment
 
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+`docker compose up --build` runs the whole stack locally. The `k8s/` manifests and
+`.github/workflows/ci-cd.yml` build images, push them to ECR, and deploy to EKS behind a
+single ELB, where the storefront and the API share an origin.
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Nx
+
+Run `npx nx graph` to explore the project graph, or `npx nx show project <name> --web` to see
+every target a project exposes. More at <https://nx.dev>.
