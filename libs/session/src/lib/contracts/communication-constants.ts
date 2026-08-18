@@ -9,15 +9,6 @@ export const REMOTE_SOURCES = {
 } as const;
 
 /**
- * Shared localStorage keys for auth session persistence.
- * Used by both the auth MFE and the shell to clear session state on logout.
- */
-export const SESSION_STORAGE_KEYS = {
-  AUTH_SESSION: 'ecommerce-mf.auth.session',
-  SHELL_AUTH_SESSION: 'ecommerce-mf.shell.auth.session',
-} as const;
-
-/**
  * Auth remote ← → Shell event types
  * Shell only receives events from the auth remote; it no longer sends navigation
  * or logout events — routing is handled directly via the Angular Router.

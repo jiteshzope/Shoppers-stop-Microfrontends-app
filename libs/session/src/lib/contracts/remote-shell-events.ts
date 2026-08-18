@@ -1,28 +1,28 @@
-export interface BaseShellEvent<TSource extends string> {
+export interface BaseEvent<TSource extends string> {
   source: TSource;
   type: string;
   timestamp: number;
 }
 
-export type AuthShellEvent = BaseShellEvent<'auth'>;
+export type AuthToShellEvent = BaseEvent<'auth'>;
 
-export type CartShellEvent = BaseShellEvent<'cart'>;
+export type CartToShellEvent = BaseEvent<'cart'>;
 
-export type ProductShellEvent = BaseShellEvent<'product'>;
+export type ProductToShellEvent = BaseEvent<'product'>;
 
 // Shell -> Cart remote events
-export type ShellCartEvent = BaseShellEvent<'shell'>;
+export type ShellToCartEvent = BaseEvent<'shell'>;
 
 // Shell -> Product remote events
-export type ShellProductEvent = BaseShellEvent<'shell'>;
+export type ShellToProductEvent = BaseEvent<'shell'>;
 
-export type AuthChannelEvent = AuthShellEvent;
-export type CartChannelEvent = CartShellEvent | ShellCartEvent;
-export type ProductChannelEvent = ProductShellEvent | ShellProductEvent;
+export type AuthChannelEvent = AuthToShellEvent;
+export type CartChannelEvent = CartToShellEvent | ShellToCartEvent;
+export type ProductChannelEvent = ProductToShellEvent | ShellToProductEvent;
 
-export type AnyShellEvent =
-  | AuthShellEvent
-  | CartShellEvent
-  | ProductShellEvent
-  | ShellCartEvent
-  | ShellProductEvent;
+export type AnyEvent =
+  | AuthToShellEvent
+  | CartToShellEvent
+  | ProductToShellEvent
+  | ShellToCartEvent
+  | ShellToProductEvent;
