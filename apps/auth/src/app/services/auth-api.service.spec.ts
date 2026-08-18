@@ -53,6 +53,14 @@ describe('AuthApiService', () => {
     request.flush({});
   });
 
+  it('reads the current session from the auth API', () => {
+    service.getSession().subscribe();
+
+    const request = httpTesting.expectOne(`${environment.authApiBaseUrl}/auth/session`);
+    expect(request.request.method).toBe('GET');
+    request.flush({ user: { id: '1', name: 'Taylor', email: 'a@b.c', phoneNumber: '1' } });
+  });
+
   it('maps logout responses to void', () => {
     let result = 'pending';
 

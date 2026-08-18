@@ -5,8 +5,7 @@ import {
   CART_SHELL_CHANNEL,
   CART_EVENT_TYPES,
   REMOTE_SOURCES,
-  type CartShellEvent,
-  type ShellCartEvent,
+  type CartToShellEvent,
 } from '@ecommerce-mf/session';
 import { ShellStore } from '../stores/shell.store';
 
@@ -19,7 +18,7 @@ export class CartRemoteService {
   constructor() {
     this.cartChannel?.events$
       .pipe(
-        filter((event): event is CartShellEvent => event.source === REMOTE_SOURCES.CART),
+        filter((event): event is CartToShellEvent => event.source === REMOTE_SOURCES.CART),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((event) => this.handleCartEvent(event));
@@ -27,7 +26,7 @@ export class CartRemoteService {
 
   // ─── Receive events from cart remote ────────────────────────────────────────
 
-  private handleCartEvent(event: CartShellEvent): void {
+  private handleCartEvent(event: CartToShellEvent): void {
     switch (event.type) {
       case CART_EVENT_TYPES.REMOTE_READY:
         console.log('[Shell ← Cart] Remote is ready');
@@ -54,39 +53,5 @@ export class CartRemoteService {
       default:
         console.log('[Shell ← Cart] Unknown event type:', event.type);
     }
-  }
-
-  // ─── Send events to cart remote ─────────────────────────────────────────────
-
-  private publishToCart(event: Omit<ShellCartEvent, 'source' | 'timestamp'>): void {
-    this.cartChannel?.publish({
-      ...event,
-      source: REMOTE_SOURCES.SHELL,
-      timestamp: Date.now(),
-    });
-  }
-
-  sendAddItem(): void {
-    this.publishToCart({
-      type: CART_EVENT_TYPES.ADD_ITEM,
-    });
-  }
-
-  sendRemoveItem(): void {
-    this.publishToCart({
-      type: CART_EVENT_TYPES.REMOVE_ITEM,
-    });
-  }
-
-  sendClearCart(): void {
-    this.publishToCart({
-      type: CART_EVENT_TYPES.CLEAR_CART,
-    });
-  }
-
-  sendSyncCart(): void {
-    this.publishToCart({
-      type: CART_EVENT_TYPES.SYNC_CART,
-    });
   }
 }

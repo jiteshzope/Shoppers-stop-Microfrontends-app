@@ -3,7 +3,7 @@ import {
   AUTH_SHELL_CHANNEL,
   AUTH_EVENT_TYPES,
   REMOTE_SOURCES,
-  type AuthShellEvent,
+  type AuthToShellEvent,
 } from '@ecommerce-mf/session';
 
 @Injectable({ providedIn: 'root' })
@@ -12,7 +12,7 @@ export class AuthShellBridgeService {
 
   // --- Send events to shell ----------------------------------------------------
 
-  private publish(event: Omit<AuthShellEvent, 'source' | 'timestamp'>): void {
+  private publish(event: Omit<AuthToShellEvent, 'source' | 'timestamp'>): void {
     this.authChannel?.publish({
       ...event,
       source: REMOTE_SOURCES.AUTH,

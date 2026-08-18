@@ -1,22 +1,19 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
-import { SESSION_STORAGE_KEYS, type SessionState } from '@ecommerce-mf/session';
+import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
 import { CART_MESSAGES } from '../constants/cart-constants';
 import { CartApiService } from '../services/cart-api.service';
 import { CartShellBridgeService } from '../services/cart-shell-bridge.service';
 import { CartStore } from './cart.store';
 
-const createSession = (token = 'token-123'): SessionState => ({
-  isAuthenticated: true,
-  token,
-  user: {
-    id: 'user-1',
-    name: 'Taylor',
-    email: 'taylor@example.com',
-    phoneNumber: '1234567890',
-    roles: ['customer'],
-  },
-});
+/** The readable CSRF cookie is the only client-visible trace of a session. */
+const giveSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+};
+
+const clearSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+};
 
 describe('CartStore', () => {
   let store: InstanceType<typeof CartStore>;
@@ -34,7 +31,7 @@ describe('CartStore', () => {
   };
 
   beforeEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
     clearCartSubject = new Subject<void>();
     api = {
       getCartItems: vi.fn(),
@@ -60,12 +57,12 @@ describe('CartStore', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
     clearCartSubject.complete();
   });
 
   it('loads cart data when an authenticated session exists', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getCartItems.mockReturnValue(
       of([
         {
@@ -98,7 +95,7 @@ describe('CartStore', () => {
   });
 
   it('surfaces load failures and publishes cart-cleared', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getCartItems.mockReturnValue(throwError(() => new Error('boom')));
 
     await store.loadData();
@@ -110,7 +107,7 @@ describe('CartStore', () => {
   });
 
   it('increases item quantity and publishes cart updates for newly added items', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addCartItem.mockReturnValue(
       of({
         id: 1,
@@ -131,7 +128,7 @@ describe('CartStore', () => {
   });
 
   it('decreases item quantity and removes the item when quantity reaches zero', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addCartItem.mockReturnValue(
       of({
         id: 1,
@@ -165,7 +162,7 @@ describe('CartStore', () => {
   });
 
   it('updates an existing item in place when increasing quantity without republishing cart-created state', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addCartItem.mockReturnValueOnce(
       of({
         id: 1,
@@ -203,7 +200,7 @@ describe('CartStore', () => {
   });
 
   it('updates an existing item in place when decreasing quantity above zero without publishing cart-cleared state', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addCartItem.mockReturnValueOnce(
       of({
         id: 1,
@@ -253,7 +250,7 @@ describe('CartStore', () => {
   });
 
   it('surfaces increase and decrease failures and always clears mutating state', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addCartItem.mockReturnValueOnce(throwError(() => new Error('boom')));
 
     await store.increaseItemQuantity(7);
@@ -267,7 +264,7 @@ describe('CartStore', () => {
   });
 
   it('initializes by publishing remote-ready and loading data', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getCartItems.mockReturnValue(of([]));
 
     store.initialize();

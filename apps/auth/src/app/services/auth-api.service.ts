@@ -15,8 +15,11 @@ export interface RegisterApiRequest extends RegisterRequest {
   phoneNumber: string;
 }
 
+/**
+ * Every auth response carries the user only. The session credential is set by
+ * the API as an httpOnly cookie and never reaches JavaScript.
+ */
 export interface AuthApiResponse {
-  accessToken: string;
   user: AuthUser;
 }
 
@@ -40,6 +43,11 @@ export class AuthApiService {
       confirmPassword: request.confirmPassword,
       phoneNumber: request.phoneNumber,
     });
+  }
+
+  /** Resolves the signed-in user from the session cookie, or errors with 401. */
+  getSession(): Observable<AuthApiResponse> {
+    return this.http.get<AuthApiResponse>(`${this.apiBaseUrl}/auth/session`);
   }
 
   logout(): Observable<void> {

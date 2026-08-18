@@ -12,6 +12,6 @@ export class RemoteEntry implements OnInit {
   readonly store = inject(AuthStore) as InstanceType<typeof AuthStore>;
 
   ngOnInit(): void {
-    this.store.initialize();
+    void this.store.initialize();
   }
 }

@@ -2,7 +2,7 @@ import { inject, DestroyRef } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
-import { SESSION_STORAGE_KEYS, type SessionState } from '@ecommerce-mf/session';
+import { hasSessionHint } from '@ecommerce-mf/session';
 import { CartApiService, type CartApiItem, type UpdateCartQuantityResponse } from '../services/cart-api.service';
 import { CartShellBridgeService } from '../services/cart-shell-bridge.service';
 import { CART_MESSAGES } from '../constants/cart-constants';
@@ -27,22 +27,10 @@ export const CartStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
   withMethods((store, api = inject(CartApiService), bridge = inject(CartShellBridgeService), destroyRef = inject(DestroyRef)) => {
-    const readAccessToken = (): string | null => {
-      try {
-        const rawSession = localStorage.getItem(SESSION_STORAGE_KEYS.AUTH_SESSION);
-        if (!rawSession) return null;
-        const session = JSON.parse(rawSession) as SessionState;
-        return session?.isAuthenticated && session.token ? session.token : null;
-      } catch {
-        return null;
-      }
-    };
-
     const loadData = async (): Promise<void> => {
       patchState(store, { loading: true, error: null });
 
-      const token = readAccessToken();
-      if (!token) {
+      if (!hasSessionHint()) {
         patchState(store, { loading: false, data: [], empty: true });
         return;
       }
@@ -132,8 +120,7 @@ export const CartStore = signalStore(
         return;
       }
 
-      const token = readAccessToken();
-      if (!token) {
+      if (!hasSessionHint()) {
         patchState(store, {
           data: [],
           empty: true,

@@ -10,7 +10,6 @@ interface ShellState {
   authSession: SessionState | null;
   isAuthenticated: boolean;
   user: SessionUser | null;
-  token: string | null;
   cartItemCount: number;
 }
 
@@ -18,9 +17,15 @@ const initialState: ShellState = {
   authSession: null,
   isAuthenticated: false,
   user: null,
-  token: null,
   cartItemCount: 0,
 };
+
+const signedOutState = {
+  authSession: null,
+  isAuthenticated: false,
+  user: null,
+  cartItemCount: 0,
+} satisfies ShellState;
 
 export const ShellStore = signalStore(
   { providedIn: 'root' },
@@ -37,18 +42,11 @@ export const ShellStore = signalStore(
           authSession: session,
           isAuthenticated: session.isAuthenticated,
           user: session.user,
-          token: session.token,
         });
       },
 
       clearAuthSession(): void {
-        patchState(store, {
-          authSession: null,
-          isAuthenticated: false,
-          user: null,
-          token: null,
-          cartItemCount: 0,
-        });
+        patchState(store, signedOutState);
       },
 
       setCartItemCount(cartItemCount: number): void {
@@ -82,11 +80,6 @@ export const ShellStore = signalStore(
         }
       },
 
-      getAuthorizationHeader(): string | null {
-        const token = store.token();
-        return token ? `Bearer ${token}` : null;
-      },
-
       goToLogin(): void {
         void router.navigateByUrl('/auth/login');
       },
@@ -95,16 +88,18 @@ export const ShellStore = signalStore(
         void router.navigateByUrl('/auth/register');
       },
 
-      logout(): void {
+      async logout(): Promise<void> {
+        // The session cookie can only be dropped by the API, so the local state
+        // is cleared once the server has actually revoked the session.
+        try {
+          await firstValueFrom(shellApi.logout());
+        } catch {
+          // Logout is best effort; the local session is cleared either way.
+        }
+
         authRemote.clearSession();
-        patchState(store, {
-          authSession: null,
-          isAuthenticated: false,
-          user: null,
-          token: null,
-          cartItemCount: 0,
-        });
-        void router.navigateByUrl('/product');
+        patchState(store, signedOutState);
+        await router.navigateByUrl('/product');
       },
     }),
   ),

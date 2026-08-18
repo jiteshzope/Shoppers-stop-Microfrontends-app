@@ -2,7 +2,6 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { ShellHeaderComponent } from './shell-header.component';
-import { CartRemoteService } from '../../services/cart-remote.service';
 import { ShellStore } from '../../stores/shell.store';
 
 describe('ShellHeaderComponent', () => {
@@ -23,11 +22,7 @@ describe('ShellHeaderComponent', () => {
       ),
       goToLogin: vi.fn(),
       goToRegister: vi.fn(),
-      logout: vi.fn(),
-    };
-
-    const cartRemote = {
-      sendClearCart: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
     };
 
     await TestBed.configureTestingModule({
@@ -35,11 +30,10 @@ describe('ShellHeaderComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ShellStore, useValue: store },
-        { provide: CartRemoteService, useValue: cartRemote },
       ],
     }).compileComponents();
 
-    return { store, cartRemote };
+    return { store };
   };
 
   it('renders login and register actions for guests', async () => {
@@ -49,7 +43,8 @@ describe('ShellHeaderComponent', () => {
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Ecommerce Shell');
+    expect(text).toContain('Shoppers');
+    expect(text).toContain('Stop');
     expect(text).toContain('Login');
     expect(text).toContain('Register');
     expect(text).not.toContain('taylor@example.com');
@@ -62,8 +57,8 @@ describe('ShellHeaderComponent', () => {
     expect(store.goToRegister).toHaveBeenCalledTimes(1);
   });
 
-  it('renders authenticated user details and clears cart before logout', async () => {
-    const { store, cartRemote } = await configureTestingModule(true);
+  it('renders authenticated user details and logs out', async () => {
+    const { store } = await configureTestingModule(true);
     const fixture = TestBed.createComponent(ShellHeaderComponent);
 
     fixture.detectChanges();
@@ -76,7 +71,6 @@ describe('ShellHeaderComponent', () => {
     const logoutButton = fixture.debugElement.query(By.css('button'));
     logoutButton.nativeElement.click();
 
-    expect(cartRemote.sendClearCart).toHaveBeenCalledTimes(1);
     expect(store.logout).toHaveBeenCalledTimes(1);
   });
 });

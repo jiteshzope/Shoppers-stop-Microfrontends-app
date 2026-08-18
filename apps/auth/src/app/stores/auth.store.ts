@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
-import { LoginRequest, SessionState, SESSION_STORAGE_KEYS } from '@ecommerce-mf/session';
+import { LoginRequest, hasSessionHint } from '@ecommerce-mf/session';
 import {
   AuthApiService,
   type AuthApiResponse,
@@ -14,7 +14,6 @@ import { AUTH_MESSAGES } from '../constants/auth-constants';
 
 interface AuthState {
   user: AuthUser | null;
-  accessToken: string | null;
   isAuthenticated: boolean;
   isSubmitting: boolean;
   error: string | null;
@@ -22,7 +21,6 @@ interface AuthState {
 
 const initialState: AuthState = {
   user: null,
-  accessToken: null,
   isAuthenticated: false,
   isSubmitting: false,
   error: null,
@@ -32,70 +30,27 @@ export const AuthStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
   withMethods((store, api = inject(AuthApiService), bridge = inject(AuthShellBridgeService)) => {
-    const createSession = (user: AuthUser, accessToken: string): SessionState => ({
-      isAuthenticated: true,
-      token: accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        phoneNumber: user.phoneNumber,
-        roles: ['customer'],
-      },
-    });
-
-    const persistSession = (session: SessionState): void => {
-      try {
-        localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
-      } catch {
-        // Ignore storage failures to avoid blocking authentication flow.
-      }
-    };
-
-    const clearPersistedSession = (): void => {
-      try {
-        localStorage.removeItem(SESSION_STORAGE_KEYS.AUTH_SESSION);
-      } catch {
-        // Ignore storage failures to avoid blocking logout flow.
-      }
-    };
-
-    const readPersistedSession = (): SessionState | null => {
-      try {
-        const rawSession = localStorage.getItem(SESSION_STORAGE_KEYS.AUTH_SESSION);
-        if (!rawSession) {
-          return null;
-        }
-
-        const parsed = JSON.parse(rawSession) as SessionState;
-        if (!parsed?.isAuthenticated || !parsed.user || !parsed.token) {
-          return null;
-        }
-
-        return parsed;
-      } catch {
-        return null;
-      }
-    };
-
     const applySuccess = (response: AuthApiResponse): void => {
-      const session = createSession(response.user, response.accessToken);
-
       patchState(store, {
         user: response.user,
-        accessToken: response.accessToken,
         isAuthenticated: true,
         isSubmitting: false,
         error: null,
       });
-
-      persistSession(session);
     };
 
     const applyFailure = (message: string): void => {
       patchState(store, {
         isSubmitting: false,
         error: message,
+      });
+    };
+
+    const clearSession = (): void => {
+      patchState(store, {
+        user: null,
+        isAuthenticated: false,
+        error: null,
       });
     };
 
@@ -112,56 +67,34 @@ export const AuthStore = signalStore(
       return null;
     };
 
+    /**
+     * Asks the API who the session cookie belongs to. The cookie hint lets us
+     * skip the round trip for visitors who clearly have no session.
+     */
+    const refreshSession = async (): Promise<boolean> => {
+      if (!hasSessionHint()) {
+        clearSession();
+        return false;
+      }
+
+      try {
+        const response = await firstValueFrom(api.getSession());
+        applySuccess(response);
+        return true;
+      } catch {
+        clearSession();
+        return false;
+      }
+    };
+
     return {
-      initialize(): void {
+      refreshSession,
+
+      async initialize(): Promise<void> {
         bridge.publishRemoteReady();
 
-        const persistedSession = readPersistedSession();
-        if (!persistedSession?.user || !persistedSession.token) {
-          return;
-        }
-
-        patchState(store, {
-          user: {
-            id: persistedSession.user.id,
-            name: persistedSession.user.name,
-            email: persistedSession.user.email,
-            phoneNumber: persistedSession.user.phoneNumber ?? '',
-          },
-          accessToken: persistedSession.token,
-          isAuthenticated: true,
-          error: null,
-        });
-
-        bridge.publishLoginSuccess();
-      },
-
-      /**
-       * Re-reads localStorage and syncs in-memory state without publishing bridge events.
-       * Call this on navigating to login/register to avoid stale isAuthenticated signals
-       * left over from a previous session that was cleared via shell logout.
-       */
-      syncFromStorage(): void {
-        const session = readPersistedSession();
-        if (session?.isAuthenticated && session.user && session.token) {
-          patchState(store, {
-            user: {
-              id: session.user.id,
-              name: session.user.name,
-              email: session.user.email,
-              phoneNumber: session.user.phoneNumber ?? '',
-            },
-            accessToken: session.token,
-            isAuthenticated: true,
-            error: null,
-          });
-        } else {
-          patchState(store, {
-            user: null,
-            accessToken: null,
-            isAuthenticated: false,
-            error: null,
-          });
+        if (await refreshSession()) {
+          bridge.publishLoginSuccess();
         }
       },
 
@@ -172,8 +105,7 @@ export const AuthStore = signalStore(
         });
 
         try {
-          const response = await firstValueFrom(api.login(request));
-          applySuccess(response);
+          applySuccess(await firstValueFrom(api.login(request)));
           bridge.publishLoginSuccess();
           return true;
         } catch {
@@ -190,14 +122,12 @@ export const AuthStore = signalStore(
         });
 
         try {
-          const response = await firstValueFrom(api.register(request));
-          applySuccess(response);
+          applySuccess(await firstValueFrom(api.register(request)));
           bridge.publishRegisterSuccess();
           return true;
         } catch (error) {
-          const errorCode = readErrorCode(error);
           const message =
-            errorCode === 'EMAIL_IN_USE'
+            readErrorCode(error) === 'EMAIL_IN_USE'
               ? AUTH_MESSAGES.EMAIL_IN_USE
               : AUTH_MESSAGES.REGISTER_FAILED;
 
@@ -207,22 +137,11 @@ export const AuthStore = signalStore(
       },
 
       logout(): void {
-        const currentAccessToken = store.accessToken();
-        if (currentAccessToken) {
-          api.logout().subscribe({
-            error: () => {
-              // Logout is best-effort. Local session is always cleared.
-            },
-          });
-        }
+        // Best effort: the local state is cleared either way, and the API drops
+        // the session cookie so the credential cannot outlive the click.
+        api.logout().subscribe({ error: () => undefined });
 
-        patchState(store, {
-          user: null,
-          accessToken: null,
-          isAuthenticated: false,
-          error: null,
-        });
-        clearPersistedSession();
+        clearSession();
         bridge.publishLogout();
       },
 

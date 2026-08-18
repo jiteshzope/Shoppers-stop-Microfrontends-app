@@ -13,7 +13,7 @@ import {
   type ProductChannelEvent,
 } from '@ecommerce-mf/session';
 import { appRoutes } from './app.routes';
-import { authTokenInterceptor } from './interceptors/auth-token.interceptor';
+import { apiSessionInterceptor } from './interceptors/api-session.interceptor';
 import { ShellRemoteChannelService } from './services/shell-remote-channel.service';
 
 const authShellChannel = new ShellRemoteChannelService<AuthChannelEvent>();
@@ -23,7 +23,7 @@ const productShellChannel = new ShellRemoteChannelService<ProductChannelEvent>()
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([authTokenInterceptor])),
+    provideHttpClient(withInterceptors([apiSessionInterceptor])),
     provideRouter(appRoutes),
     { provide: AUTH_SHELL_CHANNEL, useValue: authShellChannel },
     { provide: CART_SHELL_CHANNEL, useValue: cartShellChannel },

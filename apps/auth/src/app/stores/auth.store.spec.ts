@@ -1,25 +1,28 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
-import { SESSION_STORAGE_KEYS, type SessionState } from '@ecommerce-mf/session';
+import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
 import { AUTH_MESSAGES } from '../constants/auth-constants';
 import { AuthApiService, type AuthApiResponse } from '../services/auth-api.service';
 import { AuthShellBridgeService } from '../services/auth-shell-bridge.service';
 import { AuthStore } from './auth.store';
 
-const createResponse = (token = 'token-123'): AuthApiResponse => ({
-  accessToken: token,
+const createResponse = (email = 'taylor@example.com'): AuthApiResponse => ({
   user: {
     id: 'user-1',
     name: 'Taylor',
-    email: 'taylor@example.com',
+    email,
     phoneNumber: '+12345678901',
   },
 });
 
-const readSession = (): SessionState | null => {
-  const raw = localStorage.getItem(SESSION_STORAGE_KEYS.AUTH_SESSION);
-  return raw ? (JSON.parse(raw) as SessionState) : null;
+/** The readable CSRF cookie is the only client-visible trace of a session. */
+const giveSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+};
+
+const clearSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 };
 
 describe('AuthStore', () => {
@@ -28,6 +31,7 @@ describe('AuthStore', () => {
     login: ReturnType<typeof vi.fn>;
     register: ReturnType<typeof vi.fn>;
     logout: ReturnType<typeof vi.fn>;
+    getSession: ReturnType<typeof vi.fn>;
   };
   let bridge: {
     publishRemoteReady: ReturnType<typeof vi.fn>;
@@ -38,11 +42,12 @@ describe('AuthStore', () => {
   };
 
   beforeEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
     api = {
       login: vi.fn(),
       register: vi.fn(),
-      logout: vi.fn(),
+      logout: vi.fn().mockReturnValue(of(undefined)),
+      getSession: vi.fn(),
     };
     bridge = {
       publishRemoteReady: vi.fn(),
@@ -64,70 +69,54 @@ describe('AuthStore', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
   });
 
-  it('initializes from persisted session and notifies the shell bridge', () => {
-    localStorage.setItem(
-      SESSION_STORAGE_KEYS.AUTH_SESSION,
-      JSON.stringify({
-        isAuthenticated: true,
-        token: 'token-123',
-        user: {
-          id: 'user-1',
-          name: 'Taylor',
-          email: 'taylor@example.com',
-          phoneNumber: '+12345678901',
-          roles: ['customer'],
-        },
-      }),
-    );
+  it('restores the session from the API and notifies the shell bridge', async () => {
+    giveSessionCookie();
+    api.getSession.mockReturnValue(of(createResponse()));
 
-    store.initialize();
+    await store.initialize();
 
     expect(bridge.publishRemoteReady).toHaveBeenCalledTimes(1);
     expect(bridge.publishLoginSuccess).toHaveBeenCalledTimes(1);
     expect(store.isAuthenticated()).toBe(true);
-    expect(store.accessToken()).toBe('token-123');
     expect(store.user()?.email).toBe('taylor@example.com');
   });
 
-  it('syncs state from storage and clears stale auth state when session is absent', () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(readSession()));
-    store.syncFromStorage();
+  it('skips the session request entirely when no session cookie is present', async () => {
+    await store.initialize();
+
+    expect(api.getSession).not.toHaveBeenCalled();
     expect(store.isAuthenticated()).toBe(false);
-
-    localStorage.setItem(
-      SESSION_STORAGE_KEYS.AUTH_SESSION,
-      JSON.stringify({
-        isAuthenticated: true,
-        token: 'token-456',
-        user: {
-          id: 'user-2',
-          name: 'Jordan',
-          email: 'jordan@example.com',
-          phoneNumber: '',
-          roles: ['customer'],
-        },
-      }),
-    );
-
-    store.syncFromStorage();
-
-    expect(store.isAuthenticated()).toBe(true);
-    expect(store.accessToken()).toBe('token-456');
-    expect(store.user()?.name).toBe('Jordan');
+    expect(bridge.publishLoginSuccess).not.toHaveBeenCalled();
   });
 
-  it('logs in successfully, persists the session, and notifies the shell', async () => {
+  it('clears stale auth state when the API rejects the session cookie', async () => {
+    giveSessionCookie();
+    api.getSession.mockReturnValue(of(createResponse('jordan@example.com')));
+    await store.refreshSession();
+    expect(store.isAuthenticated()).toBe(true);
+
+    api.getSession.mockReturnValue(
+      throwError(() => new HttpErrorResponse({ status: 401, error: { message: 'UNAUTHORIZED' } })),
+    );
+
+    await store.refreshSession();
+
+    expect(store.isAuthenticated()).toBe(false);
+    expect(store.user()).toBeNull();
+  });
+
+  it('logs in successfully and notifies the shell', async () => {
     api.login.mockReturnValue(of(createResponse()));
 
     const result = await store.login({ email: 'test@example.com', password: 'Password123' });
 
     expect(result).toBe(true);
     expect(store.isAuthenticated()).toBe(true);
+    expect(store.user()?.email).toBe('taylor@example.com');
     expect(store.error()).toBeNull();
-    expect(readSession()?.token).toBe('token-123');
     expect(bridge.publishLoginSuccess).toHaveBeenCalledTimes(1);
   });
 
@@ -142,8 +131,8 @@ describe('AuthStore', () => {
     expect(bridge.publishLoginFailed).toHaveBeenCalledTimes(1);
   });
 
-  it('registers successfully, persists the session, and publishes register success', async () => {
-    api.register.mockReturnValue(of(createResponse('token-789')));
+  it('registers successfully and publishes register success', async () => {
+    api.register.mockReturnValue(of(createResponse('jordan@example.com')));
 
     const result = await store.register({
       name: 'Taylor',
@@ -155,7 +144,7 @@ describe('AuthStore', () => {
 
     expect(result).toBe(true);
     expect(store.isAuthenticated()).toBe(true);
-    expect(readSession()?.token).toBe('token-789');
+    expect(store.user()?.email).toBe('jordan@example.com');
     expect(bridge.publishRegisterSuccess).toHaveBeenCalledTimes(1);
   });
 
@@ -189,38 +178,24 @@ describe('AuthStore', () => {
     expect(store.error()).toBe(AUTH_MESSAGES.REGISTER_FAILED);
   });
 
-  it('logs out with a token, clears state, clears storage, and publishes logout', () => {
-    localStorage.setItem(
-      SESSION_STORAGE_KEYS.AUTH_SESSION,
-      JSON.stringify({
-        isAuthenticated: true,
-        token: 'token-123',
-        user: {
-          id: 'user-1',
-          name: 'Taylor',
-          email: 'taylor@example.com',
-          phoneNumber: '+12345678901',
-          roles: ['customer'],
-        },
-      }),
-    );
-    api.logout.mockReturnValue(of(undefined));
+  it('revokes the session on the API, clears state, and publishes logout', async () => {
+    giveSessionCookie();
+    api.getSession.mockReturnValue(of(createResponse()));
+    await store.initialize();
 
-    store.initialize();
     store.logout();
 
     expect(api.logout).toHaveBeenCalledTimes(1);
     expect(store.isAuthenticated()).toBe(false);
-    expect(store.accessToken()).toBeNull();
     expect(store.user()).toBeNull();
-    expect(localStorage.getItem(SESSION_STORAGE_KEYS.AUTH_SESSION)).toBeNull();
     expect(bridge.publishLogout).toHaveBeenCalledTimes(1);
   });
 
-  it('still clears local state and publishes logout when no token exists', () => {
+  it('still clears local state and publishes logout when the API call fails', () => {
+    api.logout.mockReturnValue(throwError(() => new Error('offline')));
+
     store.logout();
 
-    expect(api.logout).not.toHaveBeenCalled();
     expect(store.isAuthenticated()).toBe(false);
     expect(bridge.publishLogout).toHaveBeenCalledTimes(1);
   });

@@ -6,9 +6,8 @@ import { AuthRemoteService } from '../services/auth-remote.service';
 import { ShellApiService } from '../services/shell-api.service';
 import { ShellStore } from './shell.store';
 
-const createSession = (token = 'token-123'): SessionState => ({
+const createSession = (): SessionState => ({
   isAuthenticated: true,
-  token,
   user: {
     id: 'user-1',
     name: 'Taylor',
@@ -21,7 +20,10 @@ const createSession = (token = 'token-123'): SessionState => ({
 describe('ShellStore', () => {
   let store: InstanceType<typeof ShellStore>;
   let authRemote: { clearSession: ReturnType<typeof vi.fn> };
-  let shellApi: { getCartItemCount: ReturnType<typeof vi.fn> };
+  let shellApi: {
+    getCartItemCount: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+  };
   let router: { navigateByUrl: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
@@ -30,6 +32,7 @@ describe('ShellStore', () => {
     };
     shellApi = {
       getCartItemCount: vi.fn(),
+      logout: vi.fn().mockReturnValue(of(undefined)),
     };
     router = {
       navigateByUrl: vi.fn().mockResolvedValue(true),
@@ -54,14 +57,12 @@ describe('ShellStore', () => {
 
     expect(store.isAuthenticated()).toBe(true);
     expect(store.user()?.email).toBe('taylor@example.com');
-    expect(store.getAuthorizationHeader()).toBe('Bearer token-123');
 
     store.clearAuthSession();
 
     expect(store.isAuthenticated()).toBe(false);
     expect(store.user()).toBeNull();
     expect(store.cartItemCount()).toBe(0);
-    expect(store.getAuthorizationHeader()).toBeNull();
   });
 
   it('clamps cart count values at zero', () => {
@@ -121,12 +122,13 @@ describe('ShellStore', () => {
     expect(router.navigateByUrl).toHaveBeenNthCalledWith(2, '/auth/register');
   });
 
-  it('clears remote auth state and returns to product on logout', () => {
+  it('revokes the session, clears remote auth state, and returns to product on logout', async () => {
     store.setAuthSession(createSession());
     store.setCartItemCount(3);
 
-    store.logout();
+    await store.logout();
 
+    expect(shellApi.logout).toHaveBeenCalledTimes(1);
     expect(authRemote.clearSession).toHaveBeenCalledTimes(1);
     expect(store.isAuthenticated()).toBe(false);
     expect(store.cartItemCount()).toBe(0);

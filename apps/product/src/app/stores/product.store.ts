@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
-import { SESSION_STORAGE_KEYS, type SessionState } from '@ecommerce-mf/session';
+import { hasSessionHint } from '@ecommerce-mf/session';
 import {
   ProductApiService,
   type AddToCartApiResponse,
@@ -49,20 +49,6 @@ export const ProductStore = signalStore(
     bridge = inject(ProductShellBridgeService),
     router = inject(Router),
   ) => {
-    const readAccessToken = (): string | null => {
-      try {
-        const rawSession = localStorage.getItem(SESSION_STORAGE_KEYS.AUTH_SESSION);
-        if (!rawSession) {
-          return null;
-        }
-
-        const session = JSON.parse(rawSession) as SessionState;
-        return session?.isAuthenticated && session.token ? session.token : null;
-      } catch {
-        return null;
-      }
-    };
-
     const readErrorCode = (error: unknown): string | null => {
       if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
         const payload = error.error as { message?: unknown };
@@ -146,8 +132,7 @@ export const ProductStore = signalStore(
     };
 
     const loadCartQuantities = async (): Promise<void> => {
-      const accessToken = readAccessToken();
-      if (!accessToken) {
+      if (!hasSessionHint()) {
         patchState(store, { cartQuantities: {} });
         return;
       }
@@ -169,8 +154,7 @@ export const ProductStore = signalStore(
         addToCartError: null,
       });
 
-      const accessToken = readAccessToken();
-      if (!accessToken) {
+      if (!hasSessionHint()) {
         void router.navigate(['/auth/login'], { queryParams: { returnUrl: router.url } });
         return null;
       }

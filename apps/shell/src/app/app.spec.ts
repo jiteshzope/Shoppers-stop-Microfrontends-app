@@ -17,7 +17,6 @@ class MockShellHeaderComponent {}
 
 const createSession = (): SessionState => ({
   isAuthenticated: true,
-  token: 'token-123',
   user: {
     id: 'user-1',
     name: 'Taylor',

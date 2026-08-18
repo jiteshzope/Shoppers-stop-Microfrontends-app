@@ -2,23 +2,20 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { SESSION_STORAGE_KEYS, type SessionState } from '@ecommerce-mf/session';
+import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
 import { PRODUCT_MESSAGES } from '../constants/product-constants';
 import { ProductApiService } from '../services/product-api.service';
 import { ProductShellBridgeService } from '../services/product-shell-bridge.service';
 import { ProductStore } from './product.store';
 
-const createSession = (token = 'token-123'): SessionState => ({
-  isAuthenticated: true,
-  token,
-  user: {
-    id: 'user-1',
-    name: 'Taylor',
-    email: 'taylor@example.com',
-    phoneNumber: '1234567890',
-    roles: ['customer'],
-  },
-});
+/** The readable CSRF cookie is the only client-visible trace of a session. */
+const giveSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+};
+
+const clearSessionCookie = (): void => {
+  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+};
 
 describe('ProductStore', () => {
   let store: InstanceType<typeof ProductStore>;
@@ -39,7 +36,7 @@ describe('ProductStore', () => {
   };
 
   beforeEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
     api = {
       getProducts: vi.fn(),
       getProductById: vi.fn(),
@@ -69,11 +66,11 @@ describe('ProductStore', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    clearSessionCookie();
   });
 
   it('loads products and cart quantities successfully', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getProducts.mockReturnValue(
       of([{ id: 7, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }]),
     );
@@ -100,7 +97,7 @@ describe('ProductStore', () => {
   });
 
   it('loads product details and related cart quantities', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getProductById.mockReturnValue(
       of({ id: 7, title: 'Desk Lamp', url: '/lamp.png', price: 49.99, description: 'Warm ambient lamp' }),
     );
@@ -140,7 +137,7 @@ describe('ProductStore', () => {
   });
 
   it('adds to cart, tracks loading state, and publishes cart updates for a new item', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addToCart.mockReturnValue(
       of({ id: '1', productId: '7', quantity: 1, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }),
     );
@@ -155,7 +152,7 @@ describe('ProductStore', () => {
   });
 
   it('removes from cart, deletes empty quantities, and publishes cart updates when cleared', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addToCart.mockReturnValue(
       of({ id: '1', productId: '7', quantity: 2, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }),
     );
@@ -174,7 +171,7 @@ describe('ProductStore', () => {
   });
 
   it('does not attempt to decrease items below zero', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
 
     const result = await store.decreaseItemQuantity('7', 1);
 
@@ -183,7 +180,7 @@ describe('ProductStore', () => {
   });
 
   it('surfaces add and remove cart failures', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.addToCart.mockReturnValueOnce(throwError(() => new Error('boom')));
 
     await store.addToCart('7', 1);
@@ -202,7 +199,7 @@ describe('ProductStore', () => {
   });
 
   it('initializes the remote bridge and refreshes cart quantities for authenticated users', async () => {
-    localStorage.setItem(SESSION_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(createSession()));
+    giveSessionCookie();
     api.getCartItems.mockReturnValue(of([{ id: 1, productId: 7, title: 'Desk Lamp', url: '/lamp.png', quantity: 4, price: 49.99, lineTotal: 199.96 }]));
 
     store.initialize();

@@ -6,8 +6,8 @@ import {
   CART_SHELL_CHANNEL,
   CART_EVENT_TYPES,
   REMOTE_SOURCES,
-  type CartShellEvent,
-  type ShellCartEvent,
+  type CartToShellEvent,
+  type ShellToCartEvent,
 } from '@ecommerce-mf/session';
 
 @Injectable({ providedIn: 'root' })
@@ -22,7 +22,7 @@ export class CartShellBridgeService {
     // Subscribe to events arriving from the shell
     this.cartChannel?.events$
       .pipe(
-        filter((event): event is ShellCartEvent => event.source === REMOTE_SOURCES.SHELL),
+        filter((event): event is ShellToCartEvent => event.source === REMOTE_SOURCES.SHELL),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((event) => this.handleShellEvent(event));
@@ -30,7 +30,7 @@ export class CartShellBridgeService {
 
   // ─── Receive events from shell ───────────────────────────────────────────────
 
-  private handleShellEvent(event: ShellCartEvent): void {
+  private handleShellEvent(event: ShellToCartEvent): void {
     switch (event.type) {
 
       case CART_EVENT_TYPES.CLEAR_CART:
@@ -50,7 +50,7 @@ export class CartShellBridgeService {
 
   // ─── Send events to shell ────────────────────────────────────────────────────
 
-  private publish(event: Omit<CartShellEvent, 'source' | 'timestamp'>): void {
+  private publish(event: Omit<CartToShellEvent, 'source' | 'timestamp'>): void {
     this.cartChannel?.publish({
       ...event,
       source: REMOTE_SOURCES.CART,

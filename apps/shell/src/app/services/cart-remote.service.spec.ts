@@ -92,21 +92,4 @@ describe('CartRemoteService', () => {
     expect(console.log).toHaveBeenCalled();
   });
 
-  it('publishes shell-to-cart commands with shell metadata', () => {
-    const service = TestBed.inject(CartRemoteService);
-    const publishedEvents: CartChannelEvent[] = [];
-    channel.events$.subscribe((event) => publishedEvents.push(event));
-
-    service.sendAddItem();
-    service.sendRemoveItem();
-    service.sendClearCart();
-    service.sendSyncCart();
-
-    expect(publishedEvents).toEqual([
-      expect.objectContaining({ source: REMOTE_SOURCES.SHELL, type: CART_EVENT_TYPES.ADD_ITEM }),
-      expect.objectContaining({ source: REMOTE_SOURCES.SHELL, type: CART_EVENT_TYPES.REMOVE_ITEM }),
-      expect.objectContaining({ source: REMOTE_SOURCES.SHELL, type: CART_EVENT_TYPES.CLEAR_CART }),
-      expect.objectContaining({ source: REMOTE_SOURCES.SHELL, type: CART_EVENT_TYPES.SYNC_CART }),
-    ]);
-  });
 });

@@ -32,7 +32,7 @@ export class Login implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    this.store.syncFromStorage();
+    await this.store.refreshSession();
     if (this.store.isAuthenticated()) {
       await this.router.navigateByUrl(this.getReturnUrl());
     }

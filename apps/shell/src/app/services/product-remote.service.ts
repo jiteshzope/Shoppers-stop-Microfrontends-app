@@ -5,8 +5,8 @@ import {
   PRODUCT_SHELL_CHANNEL,
   PRODUCT_EVENT_TYPES,
   REMOTE_SOURCES,
-  type ProductShellEvent,
-  type ShellProductEvent,
+  type ProductToShellEvent,
+  type ShellToProductEvent,
 } from '@ecommerce-mf/session';
 import { ShellStore } from '../stores/shell.store';
 
@@ -21,7 +21,7 @@ export class ProductRemoteService {
   constructor() {
     this.productChannel?.events$
       .pipe(
-        filter((event): event is ProductShellEvent => event.source === REMOTE_SOURCES.PRODUCT),
+        filter((event): event is ProductToShellEvent => event.source === REMOTE_SOURCES.PRODUCT),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((event) => this.handleProductEvent(event));
@@ -29,7 +29,7 @@ export class ProductRemoteService {
 
   // ─── Receive events from product remote ─────────────────────────────────────
 
-  private handleProductEvent(event: ProductShellEvent): void {
+  private handleProductEvent(event: ProductToShellEvent): void {
     switch (event.type) {
       case PRODUCT_EVENT_TYPES.REMOTE_READY:
         console.log('[Shell ← Product] Remote is ready');
@@ -52,7 +52,7 @@ export class ProductRemoteService {
   // ─── Send events to product remote ──────────────────────────────────────────
 
   private publishToProduct(
-    event: Omit<ShellProductEvent, 'source' | 'timestamp'>,
+    event: Omit<ShellToProductEvent, 'source' | 'timestamp'>,
   ): void {
     this.productChannel?.publish({
       ...event,

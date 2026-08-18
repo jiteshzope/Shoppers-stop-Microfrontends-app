@@ -8,7 +8,7 @@ describe('Register', () => {
     options: { isAuthenticated?: boolean; returnUrl?: string | null; isSubmitting?: boolean } = {},
   ) => {
     const store = {
-      syncFromStorage: vi.fn(),
+      refreshSession: vi.fn().mockResolvedValue(false),
       isAuthenticated: vi.fn(() => options.isAuthenticated ?? false),
       isSubmitting: vi.fn(() => options.isSubmitting ?? false),
       error: vi.fn(() => null),
@@ -40,14 +40,14 @@ describe('Register', () => {
     return { store, router };
   };
 
-  it('creates the component and syncs auth state on init', async () => {
+  it('creates the component and refreshes the session on init', async () => {
     const { store } = await configureTestingModule();
     const fixture = TestBed.createComponent(Register);
 
     await fixture.componentInstance.ngOnInit();
 
     expect(fixture.componentInstance).toBeTruthy();
-    expect(store.syncFromStorage).toHaveBeenCalledTimes(1);
+    expect(store.refreshSession).toHaveBeenCalledTimes(1);
   });
 
   it('redirects authenticated users to a safe return url on init', async () => {
