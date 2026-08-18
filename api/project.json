@@ -7,16 +7,22 @@
   "targets": {
     "build": {
       "executor": "@nx/esbuild:esbuild",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "defaultConfiguration": "production",
       "options": {
         "platform": "node",
         "outputPath": "dist/api",
-        "format": ["cjs"],
+        "format": [
+          "cjs"
+        ],
         "bundle": false,
         "main": "api/src/main.ts",
         "tsConfig": "api/tsconfig.app.json",
-        "assets": ["api/src/assets"],
+        "assets": [
+          "api/src/assets"
+        ],
         "generatePackageJson": true,
         "esbuildOptions": {
           "sourcemap": true,
@@ -38,7 +44,9 @@
       }
     },
     "prune-lockfile": {
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "cache": true,
       "executor": "@nx/js:prune-lockfile",
       "outputs": [
@@ -50,23 +58,32 @@
       }
     },
     "copy-workspace-modules": {
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "cache": true,
-      "outputs": ["{workspaceRoot}/dist/api/workspace_modules"],
+      "outputs": [
+        "{workspaceRoot}/dist/api/workspace_modules"
+      ],
       "executor": "@nx/js:copy-workspace-modules",
       "options": {
         "buildTarget": "build"
       }
     },
     "prune": {
-      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
+      "dependsOn": [
+        "prune-lockfile",
+        "copy-workspace-modules"
+      ],
       "executor": "nx:noop"
     },
     "serve": {
       "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "buildTarget": "api:build",
         "runBuildTargetDependencies": false

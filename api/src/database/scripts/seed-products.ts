@@ -1,39 +1,8 @@
-CREATE TABLE IF NOT EXISTS users (
-  id BIGSERIAL PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  phone_number VARCHAR(20) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash VARCHAR(64) UNIQUE NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS products (
-  id BIGSERIAL PRIMARY KEY,
-  title VARCHAR(200) NOT NULL,
-  description TEXT NOT NULL,
-  price NUMERIC(10,2) NOT NULL,
-  image_url TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS cart_items (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  quantity INTEGER NOT NULL CHECK (quantity > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, product_id)
-);
-
+/**
+ * Reference catalogue. Upserted by id so the demo data stays consistent across
+ * restarts without ever duplicating rows.
+ */
+export const SEED_PRODUCTS_SQL = `
 INSERT INTO products (id, title, description, price, image_url)
 VALUES
   (1, 'Classic Leather Backpack', 'Water-resistant commuter backpack with a padded laptop sleeve and front organizer pocket.', 79.00, 'https://picsum.photos/seed/classic-leather-backpack/600/400'),
@@ -69,3 +38,4 @@ ON CONFLICT (id) DO UPDATE SET
   image_url = EXCLUDED.image_url;
 
 SELECT setval(pg_get_serial_sequence('products', 'id'), COALESCE((SELECT MAX(id) FROM products), 1));
+`;
