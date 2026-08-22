@@ -137,7 +137,17 @@ jobs:
           npx nx build shell   --configuration=production --verbose
           npx nx build cart    --configuration=production --verbose
           npx nx build auth    --configuration=production --verbose
-          npx nx build api     --configuration=production --verbose
+
+      # The API is a standalone NestJS project with its own scripts, so it is
+      # built, linted and tested outside the Nx graph.
+      - name: Build and test API
+        timeout-minutes: 15
+        working-directory: api
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
 
       - name: Build + push Docker images
         env:
@@ -151,7 +161,7 @@ jobs:
           docker build -t $REPO/product:$IMAGE_TAG -f apps/product/Dockerfile .
           docker build -t $REPO/cart:$IMAGE_TAG    -f apps/cart/Dockerfile    .
           docker build -t $REPO/auth:$IMAGE_TAG    -f apps/auth/Dockerfile    .
-          docker build -t $REPO/api:$IMAGE_TAG     -f api/Dockerfile          .
+          docker build -t $REPO/api:$IMAGE_TAG     -f api/Dockerfile          ./api/api
 
           docker push $REPO/shell:$IMAGE_TAG
           docker push $REPO/product:$IMAGE_TAG

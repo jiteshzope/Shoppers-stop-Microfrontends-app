@@ -8,4 +8,7 @@ data:
   HOST: "0.0.0.0"
   # ELB host updated for browser CORS origin
   CORS_ORIGIN: "http://a5d10a03df4854b31852097b4df725ec-1461367908.us-east-1.elb.amazonaws.com"
-  SESSION_TTL_HOURS: "24"
+  JWT_ACCESS_TTL: "15m"
+  JWT_REFRESH_TTL: "7d"
+  COOKIE_SECURE: "false"
+  COOKIE_SAME_SITE: "lax"

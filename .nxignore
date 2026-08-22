@@ -1,0 +1,4 @@
+# The API is a standalone NestJS project with its own package.json, build and
+# test scripts. It is deployed on its own (Railway), so it deliberately sits
+# outside the Nx graph.
+api
