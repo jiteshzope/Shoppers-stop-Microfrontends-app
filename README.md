@@ -63,8 +63,14 @@ separate origin actually needs.
   rotation of one login shares a family id — replaying an already-rotated token revokes the
   whole family.
 - The refresh token is also mirrored into an `httpOnly` cookie scoped to `/api/v1/auth`,
-  so a browser client can keep it out of reach of JavaScript. It is returned in the body as
-  well, for clients that cannot rely on cross-site cookies; `/auth/refresh` accepts either.
+  and `/auth/refresh` accepts it from either place. The storefront persists it in
+  `localStorage` rather than relying on the cookie alone, because that cookie is
+  third-party once the API and the front ends sit on different sites and browsers
+  increasingly refuse to send those.
+- `libs/session` owns both tokens and the single shared `apiSessionInterceptor`. A 401 is
+  routine rather than an error: it refreshes once and replays the request. Refreshes are
+  serialised behind a Web Locks lock, because rotation makes each refresh token single-use
+  and a replayed one revokes the whole family.
 
 There is no CSRF token any more: the old scheme authenticated with an ambient session
 cookie that a cross-site page could ride, and a bearer header cannot be forged that way.

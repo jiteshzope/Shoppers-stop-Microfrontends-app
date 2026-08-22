@@ -196,16 +196,20 @@ Railway builds this folder, and Neon holds the database.
 Use the **pooled** connection string. Neon appends `?sslmode=require`, which
 Prisma honours as-is.
 
-## What the micro-frontends need to change
+## How the micro-frontends consume this
 
-The API no longer authenticates with a session cookie, so the Angular apps'
-`apiSessionInterceptor` needs updating:
+The Angular apps are already on this scheme; `libs/session` holds the shared
+pieces (`SessionTokenService` and one `apiSessionInterceptor` for all four
+apps). If you point a different client at the API, the shape is:
 
-- drop `withCredentials` and the `x-csrf-token` header;
-- send `Authorization: Bearer <accessToken>` instead, holding the access token
-  in memory;
-- on a 401, call `POST /auth/refresh` with the stored refresh token, then retry
-  the original request once.
+- keep the access token in memory and send it as `Authorization: Bearer …`;
+- on a 401, `POST /auth/refresh` — with the refresh token in the body, or
+  relying on the cookie where the client is same-site — then replay the request
+  once. Only if the refresh fails is the shopper actually signed out;
+- **serialise refreshes.** Rotation means a token is single-use, and presenting
+  a rotated one is treated as theft and revokes the whole family. Two tabs
+  refreshing at the same moment will sign the shopper out of both unless the
+  calls are serialised (the storefront uses a Web Locks lock for this).
 
-Response bodies for the catalogue and cart are unchanged apart from a new
-`slug` on products, so those call sites keep working as they are.
+Catalogue and cart response bodies are unchanged from the Express version apart
+from a new `slug` on products.
