@@ -13,8 +13,15 @@ function readLimit(key: string, fallback: number): number {
 }
 
 /**
- * Credential endpoints — login, register, refresh — are the ones worth
- * brute-forcing, so they get a far smaller budget than ordinary reads.
+ * Login and registration are the endpoints worth brute-forcing, so they get a
+ * far smaller budget than ordinary reads.
+ *
+ * Refreshing is deliberately *not* on this budget. It presents a signed,
+ * high-entropy token rather than a guessable secret, so throttling it buys no
+ * protection — while a storefront with several micro-frontends, a short access
+ * TTL and a couple of open tabs spends refreshes quickly, and everyone behind
+ * one NAT shares the per-IP counter. It stays on the default budget, and token
+ * rotation with reuse detection is what actually guards it.
  */
 export const CREDENTIAL_THROTTLE = {
   default: {

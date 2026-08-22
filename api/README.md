@@ -138,8 +138,11 @@ Failures all share one shape:
 `message` is a stable code the front end maps to user-visible copy. Validation
 failures add an `errors` array with the field-level detail.
 
-Rate limits are per IP: 120 requests/minute by default, 10/minute on
-`/auth/login`, `/auth/register` and `/auth/refresh`.
+Rate limits are per IP: 120 requests/minute by default, and a tighter 10/minute
+on `/auth/login` and `/auth/register`. `/auth/refresh` stays on the default
+budget — it presents a signed, high-entropy token rather than a guessable
+secret, and a storefront with several micro-frontends and a short access TTL
+spends refreshes quickly. Rotation with reuse detection is what guards it.
 
 ## Deploying to Railway
 

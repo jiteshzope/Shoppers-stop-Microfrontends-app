@@ -75,7 +75,6 @@ export class AuthController {
    */
   @Public()
   @UseGuards(JwtRefreshGuard)
-  @Throttle(CREDENTIAL_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   @ApiCookieAuth()

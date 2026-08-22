@@ -3,9 +3,8 @@ import type { Page } from '@playwright/test';
 /**
  * Starts each spec from a signed-out browser.
  *
- * The session lives entirely in cookies set by the API — nothing is kept in
- * localStorage — so clearing cookies is what actually ends the session; the
- * storage sweep only guards against leftovers from earlier builds.
+ * The refresh token is kept in localStorage (and mirrored into an httpOnly
+ * cookie), so both have to go for the next spec to start as a guest.
  */
 export async function clearBrowserState(page: Page): Promise<void> {
   await page.context().clearCookies();
