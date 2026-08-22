@@ -37,6 +37,8 @@ export const CART_EVENT_TYPES = {
   REMOVE_ITEM: 'remove-item',
   CLEAR_CART: 'clear-cart',
   SYNC_CART: 'sync-cart',
+  /** The shopper signed out: drop anything derived from their session. */
+  SESSION_CLEARED: 'session-cleared',
 } as const;
 
 /**
@@ -51,4 +53,6 @@ export const PRODUCT_EVENT_TYPES = {
   LOAD_PRODUCT: 'load-product',
   CLEAR_SELECTION: 'clear-selection',
   FILTER_BY_CATEGORY: 'filter-by-category',
+  /** The shopper signed out: drop anything derived from their session. */
+  SESSION_CLEARED: 'session-cleared',
 } as const;

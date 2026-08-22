@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { SESSION_API_BASE_URL, REFRESH_TOKEN_STORAGE_KEY } from '@ecommerce-mf/session';
 import { PRODUCT_MESSAGES } from '../constants/product-constants';
 import { ProductApiService } from '../services/product-api.service';
@@ -9,11 +9,11 @@ import { ProductShellBridgeService } from '../services/product-shell-bridge.serv
 import { ProductStore } from './product.store';
 
 /** A stored refresh token is the client-visible trace of a session. */
-const giveSessionCookie = (): void => {
+const giveStoredSession = (): void => {
   localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, 'stored-refresh-token');
 };
 
-const clearSessionCookie = (): void => {
+const clearStoredSession = (): void => {
   localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
@@ -29,14 +29,16 @@ describe('ProductStore', () => {
   let bridge: {
     publishRemoteReady: ReturnType<typeof vi.fn>;
     publishCartUpdated: ReturnType<typeof vi.fn>;
+    sessionCleared$: Subject<void>;
   };
+  let sessionCleared: Subject<void>;
   let router: {
     navigate: ReturnType<typeof vi.fn>;
     url: string;
   };
 
   beforeEach(() => {
-    clearSessionCookie();
+    clearStoredSession();
     api = {
       getProducts: vi.fn(),
       getProductById: vi.fn(),
@@ -44,9 +46,11 @@ describe('ProductStore', () => {
       addToCart: vi.fn(),
       removeFromCart: vi.fn(),
     };
+    sessionCleared = new Subject<void>();
     bridge = {
       publishRemoteReady: vi.fn(),
       publishCartUpdated: vi.fn(),
+      sessionCleared$: sessionCleared,
     };
     router = {
       navigate: vi.fn().mockResolvedValue(true),
@@ -68,11 +72,11 @@ describe('ProductStore', () => {
   });
 
   afterEach(() => {
-    clearSessionCookie();
+    clearStoredSession();
   });
 
   it('loads products and cart quantities successfully', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.getProducts.mockReturnValue(
       of([{ id: 7, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }]),
     );
@@ -99,7 +103,7 @@ describe('ProductStore', () => {
   });
 
   it('loads product details and related cart quantities', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.getProductById.mockReturnValue(
       of({ id: 7, title: 'Desk Lamp', url: '/lamp.png', price: 49.99, description: 'Warm ambient lamp' }),
     );
@@ -139,7 +143,7 @@ describe('ProductStore', () => {
   });
 
   it('adds to cart, tracks loading state, and publishes cart updates for a new item', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.addToCart.mockReturnValue(
       of({ id: '1', productId: '7', quantity: 1, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }),
     );
@@ -154,7 +158,7 @@ describe('ProductStore', () => {
   });
 
   it('removes from cart, deletes empty quantities, and publishes cart updates when cleared', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.addToCart.mockReturnValue(
       of({ id: '1', productId: '7', quantity: 2, title: 'Desk Lamp', url: '/lamp.png', price: 49.99 }),
     );
@@ -173,7 +177,7 @@ describe('ProductStore', () => {
   });
 
   it('does not attempt to decrease items below zero', async () => {
-    giveSessionCookie();
+    giveStoredSession();
 
     const result = await store.decreaseItemQuantity('7', 1);
 
@@ -182,7 +186,7 @@ describe('ProductStore', () => {
   });
 
   it('surfaces add and remove cart failures', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.addToCart.mockReturnValueOnce(throwError(() => new Error('boom')));
 
     await store.addToCart('7', 1);
@@ -201,7 +205,7 @@ describe('ProductStore', () => {
   });
 
   it('initializes the remote bridge and refreshes cart quantities for authenticated users', async () => {
-    giveSessionCookie();
+    giveStoredSession();
     api.getCartItems.mockReturnValue(of([{ id: 1, productId: 7, title: 'Desk Lamp', url: '/lamp.png', quantity: 4, price: 49.99, lineTotal: 199.96 }]));
 
     store.initialize();
@@ -210,6 +214,23 @@ describe('ProductStore', () => {
     expect(bridge.publishRemoteReady).toHaveBeenCalledTimes(1);
     expect(api.getCartItems).toHaveBeenCalledTimes(1);
     expect(store.getItemQuantity('7')).toBe(4);
+  });
+
+  it('drops the cart quantities when the shell reports a sign-out', async () => {
+    giveStoredSession();
+    api.getCartItems.mockReturnValue(of([{ productId: 7, quantity: 4 }]));
+    store.initialize();
+    await Promise.resolve();
+
+    expect(store.getItemQuantity('7')).toBe(4);
+
+    // Logging out from /product does not change the route, so nothing here is
+    // re-created; the counts belong to the shopper and have to go with them.
+    sessionCleared.next();
+
+    expect(store.getItemQuantity('7')).toBe(0);
+    expect(store.cartQuantities()).toEqual({});
+    expect(store.addToCartError()).toBeNull();
   });
 
   it('exposes clear helpers for list, details, cart error, and selected product', () => {

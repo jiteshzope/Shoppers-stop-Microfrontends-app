@@ -78,4 +78,15 @@ export class ProductRemoteService {
       type: PRODUCT_EVENT_TYPES.FILTER_BY_CATEGORY,
     });
   }
+
+  /**
+   * Tells the product remote to drop everything tied to the session that just
+   * ended. Logging out from /product leaves the route unchanged, so the remote
+   * is never re-created and would otherwise keep showing the old cart counts.
+   */
+  sendSessionCleared(): void {
+    this.publishToProduct({
+      type: PRODUCT_EVENT_TYPES.SESSION_CLEARED,
+    });
+  }
 }

@@ -79,5 +79,18 @@ test.describe('session continuity', () => {
       await expect(page).toHaveURL(/\/product(?:\?|$)/);
       await shellHeader.expectSignedIn(user.email);
     });
+
+    await test.step('logging out from /product clears the quantities on screen', async () => {
+      await productPage.goto();
+      await shellHeader.expectSignedIn(user.email);
+      await expect(page.getByText(/In cart:/).first()).toBeVisible();
+
+      await shellHeader.logout();
+
+      // Logout leaves the route at /product, so the remote is never re-created.
+      await shellHeader.expectLoggedOut();
+      await expect(page).toHaveURL(/\/product(?:\?|$)/);
+      await expect(page.getByText(/In cart:/)).toHaveCount(0);
+    });
   });
 });

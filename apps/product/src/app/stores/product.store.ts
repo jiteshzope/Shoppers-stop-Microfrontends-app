@@ -1,5 +1,6 @@
-import { inject } from '@angular/core';
+import { DestroyRef, inject } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
@@ -48,6 +49,7 @@ export const ProductStore = signalStore(
     api = inject(ProductApiService),
     bridge = inject(ProductShellBridgeService),
     router = inject(Router),
+    destroyRef = inject(DestroyRef),
   ) => {
     const readErrorCode = (error: unknown): string | null => {
       if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
@@ -210,6 +212,18 @@ export const ProductStore = signalStore(
     const addToCart = async (productId: string, quantity = 1): Promise<AddToCartApiResponse | null> => {
       return mutateCartQuantity(productId, 'increase', quantity);
     };
+
+    // Quantities belong to the shopper, not the catalogue, so they have to go
+    // when the session does. Logging out from /product leaves the route
+    // unchanged, so nothing here is re-created and the counts would otherwise
+    // stay on screen for the next visitor.
+    bridge.sessionCleared$.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => {
+      patchState(store, {
+        cartQuantities: {},
+        addToCartLoadingIds: [],
+        addToCartError: null,
+      });
+    });
 
     return {
       loadProducts,
