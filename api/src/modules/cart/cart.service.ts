@@ -32,7 +32,10 @@ export class CartService {
    * requests racing to add the same product still end up with one row and the
    * combined quantity rather than a duplicate.
    */
-  async addCartItem(userId: string, { productId, quantity }: CartMutationDto): Promise<CartMutationResultDto> {
+  async addCartItem(
+    userId: string,
+    { productId, quantity }: CartMutationDto,
+  ): Promise<CartMutationResultDto> {
     if (!(await this.productExists(productId))) {
       throw new NotFoundException('PRODUCT_NOT_FOUND');
     }

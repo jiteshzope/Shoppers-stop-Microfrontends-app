@@ -9,6 +9,9 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Request, Response } from 'express';
 
+/** Statuses at or above this are our fault, so they are worth a stack trace. */
+const SERVER_ERROR_FLOOR: number = HttpStatus.INTERNAL_SERVER_ERROR;
+
 interface ErrorBody {
   statusCode: number;
   message: string;
@@ -37,7 +40,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body = this.toErrorBody(exception, request);
 
-    if (body.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (body.statusCode >= SERVER_ERROR_FLOOR) {
       this.logger.error(
         `${request.method} ${request.url} failed`,
         exception instanceof Error ? exception.stack : String(exception),
@@ -61,7 +64,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { ...this.mapPrismaError(exception), ...base };
     }
 
-    return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'INTERNAL_SERVER_ERROR', ...base };
+    return {
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'INTERNAL_SERVER_ERROR',
+      ...base,
+    };
   }
 
   private readHttpExceptionPayload(

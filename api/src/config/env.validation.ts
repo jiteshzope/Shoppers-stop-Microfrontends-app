@@ -147,7 +147,9 @@ export function validateEnvironment(raw: Record<string, unknown>): EnvironmentVa
   if (parsed.NODE_ENV === NodeEnv.Production && !parsed.COOKIE_SECURE) {
     // Not fatal: the API is reachable over plain HTTP in a container-only
     // setup, but a browser will silently drop a SameSite=None cookie.
-    console.warn('COOKIE_SECURE is false in production — refresh cookies will not be sent over HTTPS-only clients.');
+    console.warn(
+      'COOKIE_SECURE is false in production — refresh cookies will not be sent over HTTPS-only clients.',
+    );
   }
 
   return parsed;

@@ -52,10 +52,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseDto> {
-    return this.respondWithSession(
-      await this.auth.register(dto, clientInfoOf(request)),
-      response,
-    );
+    return this.respondWithSession(await this.auth.register(dto, clientInfoOf(request)), response);
   }
 
   @Public()

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import type { CookieOptions } from 'express';
-import { EnvironmentVariables, NodeEnv, SameSitePolicy } from './env.validation';
+import { EnvironmentVariables, NodeEnv } from './env.validation';
 
 /**
  * Typed façade over `ConfigService`.
@@ -98,7 +98,7 @@ export class AppConfigService {
     return {
       httpOnly: true,
       secure: this.get('COOKIE_SECURE'),
-      sameSite: this.get('COOKIE_SAME_SITE') as SameSitePolicy,
+      sameSite: this.get('COOKIE_SAME_SITE'),
       path: '/api/v1/auth',
       maxAge: maxAgeMs,
     };

@@ -27,7 +27,9 @@ export class RegisterDto {
   @ApiProperty({ example: '919812345678', description: 'E.164 digits, optional leading +' })
   @IsString()
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
-  @Matches(PHONE_PATTERN, { message: 'phoneNumber must be 10-15 digits, optionally prefixed with +' })
+  @Matches(PHONE_PATTERN, {
+    message: 'phoneNumber must be 10-15 digits, optionally prefixed with +',
+  })
   phoneNumber!: string;
 
   @ApiProperty({ example: 'Sh0pperPass', minLength: 8, maxLength: 64 })

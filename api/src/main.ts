@@ -105,6 +105,9 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch((error: unknown) => {
-  new Logger('Bootstrap').error('API failed to start', error instanceof Error ? error.stack : error);
+  new Logger('Bootstrap').error(
+    'API failed to start',
+    error instanceof Error ? error.stack : error,
+  );
   process.exit(1);
 });

@@ -96,7 +96,10 @@ export class TokenService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: Math.max(0, Math.floor((this.expiryOf(accessToken).getTime() - Date.now()) / 1000)),
+      expiresIn: Math.max(
+        0,
+        Math.floor((this.expiryOf(accessToken).getTime() - Date.now()) / 1000),
+      ),
       refreshExpiresAt,
     };
   }

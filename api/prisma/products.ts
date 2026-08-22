@@ -49,8 +49,7 @@ export const SEED_PRODUCTS: readonly SeedProduct[] = [
   {
     slug: 'noise-cancel-earbuds',
     title: 'Noise-Cancel Earbuds',
-    description:
-      'Compact true wireless earbuds with active noise canceling and a charging case.',
+    description: 'Compact true wireless earbuds with active noise canceling and a charging case.',
     price: 129.0,
   },
   {
@@ -87,8 +86,7 @@ export const SEED_PRODUCTS: readonly SeedProduct[] = [
   {
     slug: 'smart-fitness-watch',
     title: 'Smart Fitness Watch',
-    description:
-      'Everyday smartwatch with workout tracking, sleep insights, and message alerts.',
+    description: 'Everyday smartwatch with workout tracking, sleep insights, and message alerts.',
     price: 149.0,
   },
   {
@@ -100,8 +98,7 @@ export const SEED_PRODUCTS: readonly SeedProduct[] = [
   {
     slug: 'portable-bluetooth-speaker',
     title: 'Portable Bluetooth Speaker',
-    description:
-      'Small-room speaker with balanced sound, long battery life, and USB-C charging.',
+    description: 'Small-room speaker with balanced sound, long battery life, and USB-C charging.',
     price: 74.0,
   },
   {
