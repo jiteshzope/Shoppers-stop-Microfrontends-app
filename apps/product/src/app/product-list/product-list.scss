@@ -146,12 +146,17 @@
 
         .product-media {
           display: block;
-          aspect-ratio: 4 / 3;
           background: var(--color-surface-soft);
 
+          // The card is a column flex container, so this link's own height is
+          // decided by its content. A ratio set here loses to the photo's
+          // intrinsic size, which leaves every card a different height; the
+          // ratio has to sit on the image for the grid to line up whatever
+          // shape the catalog photos happen to be.
           img {
+            display: block;
             width: 100%;
-            height: 100%;
+            aspect-ratio: 4 / 3;
             object-fit: cover;
           }
         }
@@ -280,6 +285,9 @@
           animation: pulse 1.2s ease-in-out infinite;
 
           .skeleton-media {
+            // An empty div with only a background collapses to nothing, so the
+            // placeholder has to claim the same box the photo will fill.
+            aspect-ratio: 4 / 3;
             background: linear-gradient(
               90deg,
               var(--color-skeleton-base) 25%,
