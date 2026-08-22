@@ -1,0 +1,94 @@
+// Storefront data model.
+//
+// Column names are snake_case via `@map` so the SQL stays idiomatic while the
+// generated client keeps camelCase properties.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(255)
+  phoneNumber  String   @map("phone_number") @db.VarChar(20)
+  /// Argon2id digest. The plaintext password never leaves the request handler.
+  passwordHash String   @map("password_hash")
+  roles        Role[]   @default([USER])
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens RefreshToken[]
+  cartItems     CartItem[]
+
+  @@map("users")
+}
+
+/// One row per issued refresh token.
+///
+/// The row id is the JWT's `jti`, so a presented token is looked up by id and
+/// then verified against `tokenHash` — the raw token itself is never stored.
+/// `familyId` ties every rotation of one login together, which is what makes
+/// reuse detection possible: replaying a rotated token kills the whole family.
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  familyId  String    @map("family_id") @db.Uuid
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  userAgent String?   @map("user_agent") @db.VarChar(255)
+  ipAddress String?   @map("ip_address") @db.VarChar(64)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  /// Stable handle used by the seed to upsert without depending on row ids.
+  slug        String   @unique @db.VarChar(160)
+  title       String   @db.VarChar(200)
+  description String
+  price       Decimal  @db.Decimal(10, 2)
+  /// Path such as `/images/products/nordic-ceramic-mug.jpg`, expanded against
+  /// PUBLIC_BASE_URL on the way out so the same rows work on any host.
+  imagePath   String   @map("image_path")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  cartItems CartItem[]
+
+  @@map("products")
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Uuid
+  productId Int      @map("product_id")
+  quantity  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("cart_items")
+}
