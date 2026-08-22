@@ -6,4 +6,7 @@ export * from './lib/contracts/remote-shell-channel';
 export * from './lib/contracts/remote-shell-events';
 export * from './lib/contracts/remote-shell-tokens';
 export * from './lib/contracts/communication-constants';
-export * from './lib/browser/session-cookies';
+export * from './lib/auth/session-api.tokens';
+export * from './lib/auth/session-store';
+export * from './lib/auth/session-token.service';
+export * from './lib/auth/api-session.interceptor';

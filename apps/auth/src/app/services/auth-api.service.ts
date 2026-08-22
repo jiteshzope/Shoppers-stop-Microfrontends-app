@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, map } from 'rxjs';
-import { LoginRequest, RegisterRequest } from '@ecommerce-mf/session';
+import { Observable } from 'rxjs';
+import { LoginRequest, RegisterRequest, type AuthTokensResponse } from '@ecommerce-mf/session';
 import { environment } from '../../environments/environment';
 
 export interface AuthUser {
@@ -9,6 +9,7 @@ export interface AuthUser {
   name: string;
   email: string;
   phoneNumber: string;
+  roles: string[];
 }
 
 export interface RegisterApiRequest extends RegisterRequest {
@@ -16,10 +17,14 @@ export interface RegisterApiRequest extends RegisterRequest {
 }
 
 /**
- * Every auth response carries the user only. The session credential is set by
- * the API as an httpOnly cookie and never reaches JavaScript.
+ * Login and registration answer with the signed-in user *and* a token pair.
+ * `SessionTokenService` is what actually keeps the tokens; the store only ever
+ * hands them over to it.
  */
-export interface AuthApiResponse {
+export type AuthApiResponse = AuthTokensResponse;
+
+/** `/auth/session` identifies the caller behind the access token. */
+export interface SessionApiResponse {
   user: AuthUser;
 }
 
@@ -45,14 +50,12 @@ export class AuthApiService {
     });
   }
 
-  /** Resolves the signed-in user from the session cookie, or errors with 401. */
-  getSession(): Observable<AuthApiResponse> {
-    return this.http.get<AuthApiResponse>(`${this.apiBaseUrl}/auth/session`);
-  }
-
-  logout(): Observable<void> {
-    return this.http
-      .post<{ message: string }>(`${this.apiBaseUrl}/auth/logout`, {})
-      .pipe(map(() => undefined));
+  /**
+   * Resolves the signed-in user from the access token. On a cold load there is
+   * no access token yet, so the interceptor answers the 401 by refreshing and
+   * replaying this call.
+   */
+  getSession(): Observable<SessionApiResponse> {
+    return this.http.get<SessionApiResponse>(`${this.apiBaseUrl}/auth/session`);
   }
 }

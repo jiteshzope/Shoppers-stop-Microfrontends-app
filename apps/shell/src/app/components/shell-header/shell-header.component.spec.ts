@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { SESSION_API_BASE_URL } from '@ecommerce-mf/session';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { ShellHeaderComponent } from './shell-header.component';
@@ -28,6 +29,8 @@ describe('ShellHeaderComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ShellHeaderComponent],
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         provideRouter([]),
         { provide: ShellStore, useValue: store },
       ],

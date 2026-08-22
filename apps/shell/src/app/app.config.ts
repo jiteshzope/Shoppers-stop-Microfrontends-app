@@ -8,12 +8,14 @@ import {
   AUTH_SHELL_CHANNEL,
   CART_SHELL_CHANNEL,
   PRODUCT_SHELL_CHANNEL,
+  SESSION_API_BASE_URL,
+  apiSessionInterceptor,
   type AuthChannelEvent,
   type CartChannelEvent,
   type ProductChannelEvent,
 } from '@ecommerce-mf/session';
+import { environment } from '../environments/environment';
 import { appRoutes } from './app.routes';
-import { apiSessionInterceptor } from './interceptors/api-session.interceptor';
 import { ShellRemoteChannelService } from './services/shell-remote-channel.service';
 
 const authShellChannel = new ShellRemoteChannelService<AuthChannelEvent>();
@@ -25,6 +27,9 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideHttpClient(withInterceptors([apiSessionInterceptor])),
     provideRouter(appRoutes),
+    // The federated remotes resolve services against this injector, so the
+    // shell's base URL and interceptor cover every API call the page makes.
+    { provide: SESSION_API_BASE_URL, useValue: environment.ecommerceApiBaseUrl },
     { provide: AUTH_SHELL_CHANNEL, useValue: authShellChannel },
     { provide: CART_SHELL_CHANNEL, useValue: cartShellChannel },
     { provide: PRODUCT_SHELL_CHANNEL, useValue: productShellChannel },

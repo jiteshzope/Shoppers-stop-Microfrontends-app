@@ -6,6 +6,7 @@ import {
   AUTH_EVENT_TYPES,
   REMOTE_SOURCES,
   hasSessionHint,
+  SessionTokenService,
   type SessionState,
   type AuthToShellEvent,
 } from '@ecommerce-mf/session';
@@ -14,15 +15,16 @@ import { ShellApiService } from './shell-api.service';
 /**
  * Keeps the shell's view of the session in step with the auth remote.
  *
- * The session credential itself is an httpOnly cookie the shell can neither read
- * nor forge, so "restoring" a session means asking the API who the caller is
- * rather than reading anything back out of browser storage.
+ * The shell never holds the credential itself — `SessionTokenService` owns the
+ * token pair — so "restoring" a session means asking the API who the caller is
+ * rather than reconstructing anything locally.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthRemoteService {
   private readonly authChannel = inject(AUTH_SHELL_CHANNEL, { optional: true });
   private readonly destroyRef = inject(DestroyRef);
   private readonly shellApi = inject(ShellApiService);
+  private readonly tokens = inject(SessionTokenService);
   private readonly sessionState = signal<SessionState | null>(null);
 
   /**
@@ -80,6 +82,7 @@ export class AuthRemoteService {
   }
 
   clearSession(): void {
+    this.tokens.clear();
     this.sessionState.set(null);
     this.sessionResolution = Promise.resolve();
   }
@@ -104,6 +107,9 @@ export class AuthRemoteService {
       const user = await firstValueFrom(this.shellApi.getSessionUser());
       this.sessionState.set({ isAuthenticated: true, user });
     } catch {
+      // The refresh token was rejected, so the hint was stale — drop it rather
+      // than retrying this lookup on every navigation.
+      this.tokens.clear();
       this.sessionState.set(null);
     }
   }

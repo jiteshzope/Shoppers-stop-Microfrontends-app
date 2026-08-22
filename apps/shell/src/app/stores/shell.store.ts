@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
 import { Router } from '@angular/router';
-import { SessionState, type SessionUser } from '@ecommerce-mf/session';
+import { SessionState, SessionTokenService, type SessionUser } from '@ecommerce-mf/session';
 import { AuthRemoteService } from '../services/auth-remote.service';
 import { ShellApiService } from '../services/shell-api.service';
 
@@ -35,6 +35,7 @@ export const ShellStore = signalStore(
       store,
       authRemote = inject(AuthRemoteService),
       shellApi = inject(ShellApiService),
+      session = inject(SessionTokenService),
       router = inject(Router),
     ) => ({
       setAuthSession(session: SessionState): void {
@@ -89,13 +90,9 @@ export const ShellStore = signalStore(
       },
 
       async logout(): Promise<void> {
-        // The session cookie can only be dropped by the API, so the local state
-        // is cleared once the server has actually revoked the session.
-        try {
-          await firstValueFrom(shellApi.logout());
-        } catch {
-          // Logout is best effort; the local session is cleared either way.
-        }
+        // Revokes the refresh token server-side and drops the local pair. It is
+        // best effort — the local session is cleared either way.
+        await session.logout();
 
         authRemote.clearSession();
         patchState(store, signedOutState);

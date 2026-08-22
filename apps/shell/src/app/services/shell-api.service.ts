@@ -15,6 +15,7 @@ interface SessionApiResponse {
     name: string;
     email: string;
     phoneNumber: string;
+    roles?: string[];
   };
 }
 
@@ -29,7 +30,11 @@ export class ShellApiService {
       .pipe(map((items) => items.length));
   }
 
-  /** Resolves the signed-in user from the httpOnly session cookie. */
+  /**
+   * Resolves the signed-in user from the access token. On a cold load there is
+   * no access token yet, so the interceptor answers the 401 by refreshing and
+   * replaying this call.
+   */
   getSessionUser(): Observable<SessionUser> {
     return this.http.get<SessionApiResponse>(`${this.apiBaseUrl}/auth/session`).pipe(
       map(({ user }) => ({
@@ -37,14 +42,8 @@ export class ShellApiService {
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        roles: ['customer'],
+        roles: user.roles ?? [],
       })),
     );
-  }
-
-  logout(): Observable<void> {
-    return this.http
-      .post<{ message: string }>(`${this.apiBaseUrl}/auth/logout`, {})
-      .pipe(map(() => undefined));
   }
 }

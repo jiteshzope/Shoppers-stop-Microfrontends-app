@@ -2,19 +2,19 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
+import { SESSION_API_BASE_URL, REFRESH_TOKEN_STORAGE_KEY } from '@ecommerce-mf/session';
 import { PRODUCT_MESSAGES } from '../constants/product-constants';
 import { ProductApiService } from '../services/product-api.service';
 import { ProductShellBridgeService } from '../services/product-shell-bridge.service';
 import { ProductStore } from './product.store';
 
-/** The readable CSRF cookie is the only client-visible trace of a session. */
+/** A stored refresh token is the client-visible trace of a session. */
 const giveSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, 'stored-refresh-token');
 };
 
 const clearSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
 describe('ProductStore', () => {
@@ -55,6 +55,8 @@ describe('ProductStore', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         ProductStore,
         { provide: ProductApiService, useValue: api },
         { provide: ProductShellBridgeService, useValue: bridge },

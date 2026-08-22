@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import {
+  SESSION_API_BASE_URL,
   AUTH_EVENT_TYPES,
   AUTH_SHELL_CHANNEL,
   REMOTE_SOURCES,
-  SESSION_COOKIE_NAMES,
+  REFRESH_TOKEN_STORAGE_KEY,
   type AuthChannelEvent,
   type SessionUser,
 } from '@ecommerce-mf/session';
@@ -20,13 +21,13 @@ const createUser = (email = 'taylor@example.com'): SessionUser => ({
   roles: ['customer'],
 });
 
-/** The readable CSRF cookie is the only client-visible trace of a session. */
+/** A stored refresh token is the client-visible trace of a session. */
 const giveSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, 'stored-refresh-token');
 };
 
 const clearSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
 const publishAuthEvent = (
@@ -52,6 +53,8 @@ describe('AuthRemoteService', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         { provide: AUTH_SHELL_CHANNEL, useValue: channel },
         { provide: ShellApiService, useValue: shellApi },
       ],

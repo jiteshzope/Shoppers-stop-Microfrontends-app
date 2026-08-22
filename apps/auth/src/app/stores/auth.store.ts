@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
-import { LoginRequest, hasSessionHint } from '@ecommerce-mf/session';
+import { LoginRequest, SessionTokenService, hasSessionHint } from '@ecommerce-mf/session';
 import {
   AuthApiService,
   type AuthApiResponse,
@@ -29,125 +29,145 @@ const initialState: AuthState = {
 export const AuthStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
-  withMethods((store, api = inject(AuthApiService), bridge = inject(AuthShellBridgeService)) => {
-    const applySuccess = (response: AuthApiResponse): void => {
-      patchState(store, {
-        user: response.user,
-        isAuthenticated: true,
-        isSubmitting: false,
-        error: null,
-      });
-    };
-
-    const applyFailure = (message: string): void => {
-      patchState(store, {
-        isSubmitting: false,
-        error: message,
-      });
-    };
-
-    const clearSession = (): void => {
-      patchState(store, {
-        user: null,
-        isAuthenticated: false,
-        error: null,
-      });
-    };
-
-    const readErrorCode = (error: unknown): string | null => {
-      if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
-        const payload = error.error as { message?: unknown };
-        return typeof payload.message === 'string' ? payload.message : null;
-      }
-
-      if (error instanceof Error) {
-        return error.message;
-      }
-
-      return null;
-    };
-
-    /**
-     * Asks the API who the session cookie belongs to. The cookie hint lets us
-     * skip the round trip for visitors who clearly have no session.
-     */
-    const refreshSession = async (): Promise<boolean> => {
-      if (!hasSessionHint()) {
-        clearSession();
-        return false;
-      }
-
-      try {
-        const response = await firstValueFrom(api.getSession());
-        applySuccess(response);
-        return true;
-      } catch {
-        clearSession();
-        return false;
-      }
-    };
-
-    return {
-      refreshSession,
-
-      async initialize(): Promise<void> {
-        bridge.publishRemoteReady();
-
-        if (await refreshSession()) {
-          bridge.publishLoginSuccess();
-        }
-      },
-
-      async login(request: LoginRequest): Promise<boolean> {
+  withMethods(
+    (
+      store,
+      api = inject(AuthApiService),
+      bridge = inject(AuthShellBridgeService),
+      session = inject(SessionTokenService),
+    ) => {
+      const applyUser = (user: AuthUser): void => {
         patchState(store, {
-          isSubmitting: true,
+          user,
+          isAuthenticated: true,
+          isSubmitting: false,
           error: null,
         });
+      };
+
+      /**
+       * Hands the freshly issued pair to the session service before anything
+       * else, so the very next API call already carries the access token.
+       */
+      const applySuccess = (response: AuthApiResponse): void => {
+        session.adopt(response);
+        applyUser(response.user as AuthUser);
+      };
+
+      const applyFailure = (message: string): void => {
+        patchState(store, {
+          isSubmitting: false,
+          error: message,
+        });
+      };
+
+      const clearSession = (): void => {
+        patchState(store, {
+          user: null,
+          isAuthenticated: false,
+          error: null,
+        });
+      };
+
+      const readErrorCode = (error: unknown): string | null => {
+        if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
+          const payload = error.error as { message?: unknown };
+          return typeof payload.message === 'string' ? payload.message : null;
+        }
+
+        if (error instanceof Error) {
+          return error.message;
+        }
+
+        return null;
+      };
+
+      /**
+       * Asks the API who the caller is. The stored refresh token lets us skip
+       * the round trip for visitors who have clearly never signed in; when one
+       * is present but the access token has expired, the interceptor refreshes
+       * and replays the call.
+       */
+      const refreshSession = async (): Promise<boolean> => {
+        if (!hasSessionHint()) {
+          session.clear();
+          clearSession();
+          return false;
+        }
 
         try {
-          applySuccess(await firstValueFrom(api.login(request)));
-          bridge.publishLoginSuccess();
+          const { user } = await firstValueFrom(api.getSession());
+          applyUser(user);
           return true;
         } catch {
-          applyFailure(AUTH_MESSAGES.INVALID_LOGIN);
-          bridge.publishLoginFailed();
+          session.clear();
+          clearSession();
           return false;
         }
-      },
+      };
 
-      async register(request: RegisterApiRequest): Promise<boolean> {
-        patchState(store, {
-          isSubmitting: true,
-          error: null,
-        });
+      return {
+        refreshSession,
 
-        try {
-          applySuccess(await firstValueFrom(api.register(request)));
-          bridge.publishRegisterSuccess();
-          return true;
-        } catch (error) {
-          const message =
-            readErrorCode(error) === 'EMAIL_IN_USE'
-              ? AUTH_MESSAGES.EMAIL_IN_USE
-              : AUTH_MESSAGES.REGISTER_FAILED;
+        async initialize(): Promise<void> {
+          bridge.publishRemoteReady();
 
-          applyFailure(message);
-          return false;
-        }
-      },
+          if (await refreshSession()) {
+            bridge.publishLoginSuccess();
+          }
+        },
 
-      logout(): void {
-        // Best effort: the local state is cleared either way, and the API drops
-        // the session cookie so the credential cannot outlive the click.
-        api.logout().subscribe({ error: () => undefined });
+        async login(request: LoginRequest): Promise<boolean> {
+          patchState(store, {
+            isSubmitting: true,
+            error: null,
+          });
 
-        clearSession();
-        bridge.publishLogout();
-      },
+          try {
+            applySuccess(await firstValueFrom(api.login(request)));
+            bridge.publishLoginSuccess();
+            return true;
+          } catch {
+            applyFailure(AUTH_MESSAGES.INVALID_LOGIN);
+            bridge.publishLoginFailed();
+            return false;
+          }
+        },
 
-      clearError(): void {
-        patchState(store, { error: null });
-      },
-    };
-  }),
+        async register(request: RegisterApiRequest): Promise<boolean> {
+          patchState(store, {
+            isSubmitting: true,
+            error: null,
+          });
+
+          try {
+            applySuccess(await firstValueFrom(api.register(request)));
+            bridge.publishRegisterSuccess();
+            return true;
+          } catch (error) {
+            const message =
+              readErrorCode(error) === 'EMAIL_IN_USE'
+                ? AUTH_MESSAGES.EMAIL_IN_USE
+                : AUTH_MESSAGES.REGISTER_FAILED;
+
+            applyFailure(message);
+            return false;
+          }
+        },
+
+        logout(): void {
+          // Best effort: the API revokes the refresh token, and the local pair
+          // is dropped either way so the credential cannot outlive the click.
+          void session.logout();
+
+          clearSession();
+          bridge.publishLogout();
+        },
+
+        clearError(): void {
+          patchState(store, { error: null });
+        },
+      };
+    },
+  ),
 );

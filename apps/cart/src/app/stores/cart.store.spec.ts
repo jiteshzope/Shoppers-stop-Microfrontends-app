@@ -1,18 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
-import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
+import { SESSION_API_BASE_URL, REFRESH_TOKEN_STORAGE_KEY } from '@ecommerce-mf/session';
 import { CART_MESSAGES } from '../constants/cart-constants';
 import { CartApiService } from '../services/cart-api.service';
 import { CartShellBridgeService } from '../services/cart-shell-bridge.service';
 import { CartStore } from './cart.store';
 
-/** The readable CSRF cookie is the only client-visible trace of a session. */
+/** A stored refresh token is the client-visible trace of a session. */
 const giveSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, 'stored-refresh-token');
 };
 
 const clearSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
 describe('CartStore', () => {
@@ -47,6 +47,8 @@ describe('CartStore', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         CartStore,
         { provide: CartApiService, useValue: api },
         { provide: CartShellBridgeService, useValue: bridge },

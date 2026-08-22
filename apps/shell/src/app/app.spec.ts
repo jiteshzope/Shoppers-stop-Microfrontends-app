@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { type SessionState } from '@ecommerce-mf/session';
+import { SESSION_API_BASE_URL, type SessionState } from '@ecommerce-mf/session';
 import { App } from './app';
 import { ShellHeaderComponent } from './components/shell-header/shell-header.component';
 import { AuthRemoteService } from './services/auth-remote.service';
@@ -46,6 +46,8 @@ describe('App', () => {
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         provideRouter([]),
         { provide: AuthRemoteService, useValue: authRemote },
         { provide: CartRemoteService, useValue: {} },
