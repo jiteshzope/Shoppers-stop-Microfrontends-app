@@ -8,7 +8,7 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "prebuild": "rimraf dist",
+    "prebuild": "rimraf dist tsconfig.build.tsbuildinfo",
     "build": "nest build && tsc -p tsconfig.seed.json",
     "postinstall": "prisma generate",
     "start": "nest start",
