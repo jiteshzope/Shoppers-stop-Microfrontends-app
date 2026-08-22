@@ -29,7 +29,8 @@ The app is then on <http://localhost:4200> and the API on <http://localhost:3000
 
 Copy `api/.env.example` to `api/.env` to override any setting; every variable is
 documented there. If port 3000 or 5432 is already taken, set `PORT` / `DATABASE_URL`
-accordingly and update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
+accordingly, match `PUBLIC_BASE_URL` to the new port so product images still resolve, and
+update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
 
 ### Checks
 
@@ -71,6 +72,7 @@ api/src
 ├── main.ts                  bootstrap: migrations, listen, graceful shutdown
 ├── app.ts                   express wiring (CORS, parsers, routers, error handling)
 ├── routes.ts                /api/v1 router aggregation
+├── assets/products/         catalog photos, served as static files
 ├── config/environment.ts    validated, typed configuration read once at startup
 ├── database/                pool, migration runner, schema and seed scripts
 ├── middleware/              authenticate, CSRF, 404 and error handlers
@@ -102,6 +104,29 @@ as a generic 500.
 | GET    | `/api/v1/cart`                  | cookie      | Cart contents               |
 | POST   | `/api/v1/cart/items`            | cookie+CSRF | Add quantity to the cart    |
 | POST   | `/api/v1/cart/items/remove`     | cookie+CSRF | Remove quantity from the cart |
+
+## Catalog images
+
+Every product ships with a photo of the thing it is named after. The files live in
+`api/src/assets/products`, are copied into the build, and are served straight from the API
+at `/images/products/<slug>.jpg` — no cookie, no CSRF token and no JSON round trip, so an
+`<img>` tag is enough. `credits.json` records the source, author and licence of each file.
+
+`products.image_url` stores that path rather than an absolute URL, so a database seeded on a
+laptop stays correct behind a container or a domain; the API expands it against
+`PUBLIC_BASE_URL` on the way out. A row holding a full `http(s)` URL is passed through
+untouched, which leaves room for pointing at a CDN instead.
+
+To re-pick a photo, edit its entry in `api/tools/image-queries.json` and re-run the fetcher:
+
+```sh
+node api/tools/fetch-product-images.mjs --list "desk lamp"   # see the candidates
+node api/tools/fetch-product-images.mjs --force desk-lamp     # re-download one product
+node api/tools/fetch-product-images.mjs                       # fetch whatever is missing
+```
+
+Search relevance on its own is not enough — it offers a shattered light fixture for "desk
+lamp" — so `--list` prints the candidates and the `file` field pins the one chosen by hand.
 
 ## Shell ↔ remote communication
 
