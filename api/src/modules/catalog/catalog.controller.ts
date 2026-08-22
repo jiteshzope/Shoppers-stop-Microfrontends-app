@@ -1,12 +1,28 @@
-import type { Request, Response } from 'express';
-import { parsePositiveInteger } from '../../shared/parse';
-import * as catalogService from './catalog.service';
+import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '../../common/decorators/public.decorator';
+import { CatalogService } from './catalog.service';
+import { ProductDetailsDto, ProductSummaryDto } from './dto/product.dto';
 
-export async function listProducts(_req: Request, res: Response): Promise<void> {
-  res.status(200).json(await catalogService.listProducts());
-}
+@ApiTags('catalog')
+@Public()
+@Controller('catalog')
+export class CatalogController {
+  constructor(private readonly catalog: CatalogService) {}
 
-export async function getProduct(req: Request, res: Response): Promise<void> {
-  const productId = parsePositiveInteger(req.params['id'], 'INVALID_PRODUCT_ID');
-  res.status(200).json(await catalogService.getProduct(productId));
+  @Get('products')
+  @ApiOperation({ summary: 'List every product in the catalogue' })
+  @ApiOkResponse({ type: ProductSummaryDto, isArray: true })
+  listProducts(): Promise<ProductSummaryDto[]> {
+    return this.catalog.listProducts();
+  }
+
+  @Get('products/:id')
+  @ApiOperation({ summary: 'Fetch one product by id' })
+  @ApiOkResponse({ type: ProductDetailsDto })
+  getProduct(
+    @Param('id', new ParseIntPipe({ errorHttpStatusCode: 400 })) id: number,
+  ): Promise<ProductDetailsDto> {
+    return this.catalog.getProduct(id);
+  }
 }

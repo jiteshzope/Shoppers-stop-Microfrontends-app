@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { SESSION_API_BASE_URL } from '@ecommerce-mf/session';
 import { Router, UrlTree, provideRouter } from '@angular/router';
 import { cartAuthGuard } from './cart-auth.guard';
 import { AuthRemoteService } from '../services/auth-remote.service';
@@ -6,6 +7,8 @@ import { AuthRemoteService } from '../services/auth-remote.service';
 const configureTestingModule = (isAuthenticated: boolean, resolveSession: Promise<void>) => {
   TestBed.configureTestingModule({
     providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
       provideRouter([]),
       {
         provide: AuthRemoteService,
@@ -45,6 +48,8 @@ describe('cartAuthGuard', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         provideRouter([]),
         {
           provide: AuthRemoteService,

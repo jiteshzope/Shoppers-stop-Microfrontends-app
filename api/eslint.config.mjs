@@ -1,16 +1,38 @@
-import baseConfig from '../eslint.config.mjs';
+// @ts-check
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import eslintPluginPrettierRecommended from 'eslint-config-prettier';
 
-export default [
-  ...baseConfig,
+export default tseslint.config(
   {
-    files: ['**/*.ts'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'tools/**'],
+  },
+  eslint.configs.recommended,
+  ...tseslint.configs.recommendedTypeChecked,
+  eslintPluginPrettierRecommended,
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
-      // Express identifies error middleware by its arity, so the trailing
-      // `next` parameter has to stay even when it is never called.
-      '@typescript-eslint/no-unused-vars': [
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/explicit-function-return-type': [
         'warn',
+        { allowExpressions: true },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
     },
   },
-];
+  {
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
+);

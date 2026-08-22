@@ -28,8 +28,25 @@ spec:
                 secretKeyRef:
                   name: ecommerce-secrets
                   key: DATABASE_URL
-            - name: JWT_SECRET
+            - name: JWT_ACCESS_SECRET
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: JWT_SECRET
+                  key: JWT_ACCESS_SECRET
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secrets
+                  key: JWT_REFRESH_SECRET
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10

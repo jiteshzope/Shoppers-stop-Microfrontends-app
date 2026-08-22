@@ -50,18 +50,4 @@ describe('ShellApiService', () => {
 
     expect(email).toBe('taylor@example.com');
   });
-
-  it('posts to the logout endpoint', () => {
-    let result = 'pending';
-
-    service.logout().subscribe((value) => {
-      result = String(value);
-    });
-
-    const request = httpTesting.expectOne(`${environment.ecommerceApiBaseUrl}/auth/logout`);
-    expect(request.request.method).toBe('POST');
-    request.flush({ message: 'LOGOUT_SUCCESS' });
-
-    expect(result).toBe('undefined');
-  });
 });

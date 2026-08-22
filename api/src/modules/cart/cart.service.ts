@@ -1,73 +1,122 @@
-import { notFound } from '../../shared/http-error';
-import * as catalogRepository from '../catalog/catalog.repository';
-import * as repository from './cart.repository';
-import type { CartItem, CartItemRow, CartMutationInput, CartMutationResult } from './cart.types';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import type { CartItem, Product } from '@prisma/client';
+import { AppConfigService } from '../../config/app-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { toProductImageUrl } from '../catalog/product-image';
+import type { CartItemDto, CartMutationResultDto } from './dto/cart-item.dto';
+import type { CartMutationDto } from './dto/cart-mutation.dto';
 
-function toCartItem(row: CartItemRow): CartItem {
-  const price = Number(row.price);
+type CartItemWithProduct = CartItem & { product: Product };
 
-  return {
-    id: Number(row.id),
-    productId: Number(row.product_id),
-    title: row.title,
-    url: row.image_url,
-    quantity: row.quantity,
-    price,
-    lineTotal: price * row.quantity,
-  };
-}
+@Injectable()
+export class CartService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: AppConfigService,
+  ) {}
 
-function toMutationResult(row: CartItemRow): CartMutationResult {
-  const item = toCartItem(row);
+  async listCartItems(userId: string): Promise<CartItemDto[]> {
+    const items = await this.prisma.cartItem.findMany({
+      where: { userId },
+      include: { product: true },
+      orderBy: { createdAt: 'desc' },
+    });
 
-  return {
-    id: item.id,
-    productId: item.productId,
-    quantity: item.quantity,
-    title: item.title,
-    url: item.url,
-    price: item.price,
-  };
-}
-
-export async function listCartItems(userId: string): Promise<CartItem[]> {
-  return (await repository.findCartItems(userId)).map(toCartItem);
-}
-
-export async function addCartItem(
-  userId: string,
-  { productId, quantity }: CartMutationInput,
-): Promise<CartMutationResult> {
-  if (!(await catalogRepository.productExists(productId))) {
-    throw notFound('PRODUCT_NOT_FOUND');
+    return items.map((item) => this.toCartItem(item));
   }
 
-  await repository.upsertCartItem(userId, productId, quantity);
+  /**
+   * Adds the quantity to an existing line, or creates the line when absent.
+   *
+   * The upsert leans on the `(user_id, product_id)` unique index, so two
+   * requests racing to add the same product still end up with one row and the
+   * combined quantity rather than a duplicate.
+   */
+  async addCartItem(
+    userId: string,
+    { productId, quantity }: CartMutationDto,
+  ): Promise<CartMutationResultDto> {
+    if (!(await this.productExists(productId))) {
+      throw new NotFoundException('PRODUCT_NOT_FOUND');
+    }
 
-  const row = await repository.findCartItem(userId, productId);
-  if (!row) {
-    throw notFound('CART_ITEM_NOT_FOUND');
+    const item = await this.prisma.cartItem.upsert({
+      where: { userId_productId: { userId, productId } },
+      create: { userId, productId, quantity },
+      update: { quantity: { increment: quantity } },
+      include: { product: true },
+    });
+
+    return this.toMutationResult(item);
   }
 
-  return toMutationResult(row);
-}
+  /**
+   * Removes `quantity` units, deleting the line once nothing is left. Reads and
+   * writes run in one transaction so two concurrent removals cannot both see
+   * the pre-decrement quantity and drive the line negative.
+   */
+  async removeCartItem(
+    userId: string,
+    { productId, quantity }: CartMutationDto,
+  ): Promise<CartMutationResultDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.cartItem.findUnique({
+        where: { userId_productId: { userId, productId } },
+        include: { product: true },
+      });
 
-export async function removeCartItem(
-  userId: string,
-  { productId, quantity }: CartMutationInput,
-): Promise<CartMutationResult> {
-  const existing = await repository.findCartItem(userId, productId);
-  if (!existing) {
-    throw notFound('CART_ITEM_NOT_FOUND');
+      if (!existing) {
+        throw new NotFoundException('CART_ITEM_NOT_FOUND');
+      }
+
+      const nextQuantity = existing.quantity - quantity;
+
+      if (nextQuantity <= 0) {
+        await tx.cartItem.delete({ where: { id: existing.id } });
+        return { productId, quantity: 0, removed: true };
+      }
+
+      const updated = await tx.cartItem.update({
+        where: { id: existing.id },
+        data: { quantity: nextQuantity },
+        include: { product: true },
+      });
+
+      return this.toMutationResult(updated);
+    });
   }
 
-  const nextQuantity = existing.quantity - quantity;
-
-  if (nextQuantity <= 0) {
-    await repository.deleteCartItem(userId, productId);
-    return { productId, quantity: 0, removed: true };
+  /** Empties the cart — used after checkout and by "clear cart" in the UI. */
+  async clearCart(userId: string): Promise<{ removed: number }> {
+    const { count } = await this.prisma.cartItem.deleteMany({ where: { userId } });
+    return { removed: count };
   }
 
-  await repository.updateCartItemQuantity(userId, productId, nextQuantity);
-  return toMutationResult({ ...existing, quantity: nextQuantity });
+  private async productExists(productId: number): Promise<boolean> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true },
+    });
+
+    return product !== null;
+  }
+
+  private toCartItem(item: CartItemWithProduct): CartItemDto {
+    const price = item.product.price.toNumber();
+
+    return {
+      id: item.id,
+      productId: item.productId,
+      title: item.product.title,
+      url: toProductImageUrl(this.config.publicBaseUrl, item.product.imagePath),
+      quantity: item.quantity,
+      price,
+      lineTotal: Number((price * item.quantity).toFixed(2)),
+    };
+  }
+
+  private toMutationResult(item: CartItemWithProduct): CartMutationResultDto {
+    const { id, productId, quantity, title, url, price } = this.toCartItem(item);
+    return { id, productId, quantity, title, url, price };
+  }
 }

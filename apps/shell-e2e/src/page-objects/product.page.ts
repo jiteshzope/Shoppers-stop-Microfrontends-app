@@ -33,6 +33,14 @@ export class ProductPage {
     await expect(card.getByText(/In cart:\s*1/)).toBeVisible();
   }
 
+  async increaseFromList(title: string, expectedQuantity: number): Promise<void> {
+    const card = this.productCard(title);
+
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Increase quantity' }).click();
+    await expect(card.getByText(new RegExp(String.raw`In cart:\s*${expectedQuantity}`))).toBeVisible();
+  }
+
   async openDetails(title: string): Promise<void> {
     const card = this.productCard(title);
 

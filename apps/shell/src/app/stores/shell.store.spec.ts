@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
-import { type SessionState } from '@ecommerce-mf/session';
+import {
+  SESSION_API_BASE_URL,
+  SessionTokenService,
+  type SessionState,
+} from '@ecommerce-mf/session';
 import { AuthRemoteService } from '../services/auth-remote.service';
 import { ShellApiService } from '../services/shell-api.service';
 import { ShellStore } from './shell.store';
@@ -20,19 +24,18 @@ const createSession = (): SessionState => ({
 describe('ShellStore', () => {
   let store: InstanceType<typeof ShellStore>;
   let authRemote: { clearSession: ReturnType<typeof vi.fn> };
-  let shellApi: {
-    getCartItemCount: ReturnType<typeof vi.fn>;
-    logout: ReturnType<typeof vi.fn>;
-  };
+  let shellApi: { getCartItemCount: ReturnType<typeof vi.fn> };
+  let session: { logout: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
   let router: { navigateByUrl: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     authRemote = {
       clearSession: vi.fn(),
     };
-    shellApi = {
-      getCartItemCount: vi.fn(),
-      logout: vi.fn().mockReturnValue(of(undefined)),
+    shellApi = { getCartItemCount: vi.fn() };
+    session = {
+      logout: vi.fn().mockResolvedValue(undefined),
+      clear: vi.fn(),
     };
     router = {
       navigateByUrl: vi.fn().mockResolvedValue(true),
@@ -40,9 +43,12 @@ describe('ShellStore', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         ShellStore,
         { provide: AuthRemoteService, useValue: authRemote },
         { provide: ShellApiService, useValue: shellApi },
+        { provide: SessionTokenService, useValue: session },
         { provide: Router, useValue: router },
       ],
     });
@@ -128,7 +134,7 @@ describe('ShellStore', () => {
 
     await store.logout();
 
-    expect(shellApi.logout).toHaveBeenCalledTimes(1);
+    expect(session.logout).toHaveBeenCalledTimes(1);
     expect(authRemote.clearSession).toHaveBeenCalledTimes(1);
     expect(store.isAuthenticated()).toBe(false);
     expect(store.cartItemCount()).toBe(0);

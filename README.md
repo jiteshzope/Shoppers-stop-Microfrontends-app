@@ -1,7 +1,7 @@
 # Ecommerce MF
 
 An Angular micro-frontend storefront ("Shoppers Stop") built on Nx and Module Federation,
-backed by an Express + PostgreSQL API.
+backed by a NestJS + Prisma + PostgreSQL API.
 
 | Project   | Type                       | Dev port | Description                                  |
 | --------- | -------------------------- | -------- | -------------------------------------------- |
@@ -10,7 +10,7 @@ backed by an Express + PostgreSQL API.
 | `cart`    | Remote                     | 4202     | Cart contents and quantity changes            |
 | `auth`    | Remote                     | 4203     | Login and registration                        |
 | `session` | Library (`@ecommerce-mf/session`) | –  | Contracts shared by the shell and remotes     |
-| `api`     | Express service            | 3000     | REST API over PostgreSQL                      |
+| `api`     | NestJS service             | 3000     | REST API over PostgreSQL via Prisma           |
 
 ## Running locally
 
@@ -18,8 +18,8 @@ backed by an Express + PostgreSQL API.
 # 1. Database
 docker compose up -d postgres
 
-# 2. API — creates the schema and seeds the catalog on boot
-npx nx serve api
+# 2. API — a standalone project with its own scripts, outside the Nx graph
+cd api && npm install && npm run prisma:migrate && npm run db:seed && npm run start:dev
 
 # 3. Storefront — the host also serves the three remotes
 npx nx run shell:serve
@@ -27,9 +27,13 @@ npx nx run shell:serve
 
 The app is then on <http://localhost:4200> and the API on <http://localhost:3000>.
 
-Copy `api/.env.example` to `api/.env` to override any setting; every variable is
+Copy `api/.env.example` to `api/.env` and fill in the two JWT secrets; every variable is
 documented there. If port 3000 or 5432 is already taken, set `PORT` / `DATABASE_URL`
-accordingly and update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
+accordingly, match `PUBLIC_BASE_URL` to the new port so product images still resolve, and
+update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
+
+See [api/README.md](api/README.md) for the API's own scripts, configuration and the
+Railway + Neon deployment steps.
 
 ### Checks
 
@@ -37,71 +41,119 @@ accordingly and update `localApiBaseUrl` in `apps/*/src/environments/environment
 npx nx run-many -t lint
 npx nx run-many -t test
 npx nx e2e shell-e2e          # Playwright; starts the shell dev server itself
+
+cd api && npm run lint && npm test && npm run test:e2e
 ```
 
-The e2e suite talks to a real API, so keep the database and `nx serve api` running.
+The Playwright suite talks to a real API, so keep the database and `npm run start:dev`
+in `api/` running.
 
 ## Authentication
 
-The session credential never reaches JavaScript.
+Short-lived JWT access tokens with rotating refresh tokens — a bearer header travels
+cross-origin without depending on third-party cookies, which is what a micro-frontend on a
+separate origin actually needs.
 
-- On login or registration the API issues an opaque random session token, stores only its
-  SHA-256 digest in `sessions`, and returns it in an **`httpOnly`** cookie. Nothing is kept
-  in `localStorage`, `sessionStorage`, or application state, so an injected script has
-  nothing to steal.
-- Because the browser attaches that cookie automatically, every state-changing request must
-  also carry the per-session CSRF token in an `X-CSRF-Token` header. The token is delivered
-  in a second, readable cookie; a cross-site page can trigger a request but cannot read the
-  cookie to fill in the header. `apiSessionInterceptor` adds it on the client, and
-  `verifyCsrfToken` checks it (in constant time) on the server.
-- That readable CSRF cookie doubles as a non-secret "session present" hint, which lets the
-  SPA skip pointless calls and redirect guests without ever holding a credential.
-  `GET /api/v1/auth/session` remains the only authority on whether a session is valid, and
-  is what the app uses to rehydrate after a reload.
+- Passwords are hashed with **Argon2id** at the OWASP baseline. A login against a
+  non-existent account still verifies a dummy digest, so response time does not reveal
+  which emails are registered.
+- The **access token** lives 15 minutes and travels in `Authorization: Bearer …`.
+- The **refresh token** lives 7 days. Only its Argon2 digest is stored, keyed by the JWT's
+  `jti`, so a database dump yields no usable tokens. Every refresh rotates it, and every
+  rotation of one login shares a family id — replaying an already-rotated token revokes the
+  whole family.
+- The refresh token is also mirrored into an `httpOnly` cookie scoped to `/api/v1/auth`,
+  and `/auth/refresh` accepts it from either place. The storefront persists it in
+  `localStorage` rather than relying on the cookie alone, because that cookie is
+  third-party once the API and the front ends sit on different sites and browsers
+  increasingly refuse to send those.
+- `libs/session` owns both tokens and the single shared `apiSessionInterceptor`. A 401 is
+  routine rather than an error: it refreshes once and replays the request. Refreshes are
+  serialised behind a Web Locks lock, because rotation makes each refresh token single-use
+  and a replayed one revokes the whole family.
 
-Set `COOKIE_SECURE=true` (and `COOKIE_SAME_SITE` if the API is on a different site than the
-storefront) whenever the API is served over HTTPS.
+There is no CSRF token any more: the old scheme authenticated with an ambient session
+cookie that a cross-site page could ride, and a bearer header cannot be forged that way.
+
+Access control is closed by default — the access-token guard is global, and a route has to
+opt out with `@Public()`.
+
+Set `COOKIE_SECURE=true` and `COOKIE_SAME_SITE=none` whenever the API is served over HTTPS
+on a different origin than the storefront.
 
 ## API layout
 
-`api/src` is organised by layer, with each feature owning its full slice:
+`api/` is a standalone NestJS project with its own `package.json`, deliberately outside the
+Nx graph so it can be deployed on its own.
 
 ```
-api/src
-├── main.ts                  bootstrap: migrations, listen, graceful shutdown
-├── app.ts                   express wiring (CORS, parsers, routers, error handling)
-├── routes.ts                /api/v1 router aggregation
-├── config/environment.ts    validated, typed configuration read once at startup
-├── database/                pool, migration runner, schema and seed scripts
-├── middleware/              authenticate, CSRF, 404 and error handlers
-├── shared/                  HttpError, async handler, parsing, logging
-└── modules/
-    ├── auth/                routes → controller → service → repository (+ validator, cookies)
-    ├── catalog/             routes → controller → service → repository
-    ├── cart/                routes → controller → service → repository (+ validator)
-    └── health/              readiness probe
+api/
+├── prisma/
+│   ├── schema.prisma        data model
+│   ├── migrations/          generated SQL, applied with `prisma migrate deploy`
+│   └── seed.ts              idempotent catalogue seed
+└── src/
+    ├── main.ts              bootstrap: Helmet, CORS, validation, static images, Swagger
+    ├── app.module.ts        global guards, exception filter, rate limiting
+    ├── config/              environment validation and a typed accessor for it
+    ├── prisma/              the shared PrismaClient
+    ├── common/              exception filter, decorators, shared types
+    ├── assets/products/     catalogue photos, copied into dist by the build
+    └── modules/
+        ├── auth/            Argon2 hashing, JWT issue/rotate, Passport strategies
+        ├── catalog/         products
+        ├── cart/            cart lines
+        └── health/          liveness and readiness
 ```
 
-Controllers only translate HTTP to and from the services; services hold the business rules;
-repositories own the SQL. Handlers throw `HttpError`, and a single error middleware turns
-those into a status plus a stable error code (`INVALID_CREDENTIALS`, `EMAIL_IN_USE`, …) that
-the front end maps to user-facing copy. Unexpected failures are logged in full and reported
-as a generic 500.
+Controllers only translate HTTP to and from the services; services hold the business rules
+and talk to Prisma. A single exception filter turns failures into a status plus a stable
+error code (`INVALID_CREDENTIALS`, `EMAIL_IN_USE`, …) that the front end maps to
+user-facing copy. Unexpected failures are logged in full and reported as a generic 500.
+
+An OpenAPI explorer is served at `/docs`.
 
 ### Endpoints
 
-| Method | Path                            | Auth        | Purpose                     |
-| ------ | ------------------------------- | ----------- | --------------------------- |
-| GET    | `/health`                       | –           | Readiness probe             |
-| POST   | `/api/v1/auth/register`         | –           | Create an account           |
-| POST   | `/api/v1/auth/login`            | –           | Start a session             |
-| GET    | `/api/v1/auth/session`          | cookie      | Resolve the signed-in user  |
-| POST   | `/api/v1/auth/logout`           | cookie+CSRF | Revoke the session          |
-| GET    | `/api/v1/catalog/products`      | –           | Catalog list                |
-| GET    | `/api/v1/catalog/products/:id`  | –           | Product details             |
-| GET    | `/api/v1/cart`                  | cookie      | Cart contents               |
-| POST   | `/api/v1/cart/items`            | cookie+CSRF | Add quantity to the cart    |
-| POST   | `/api/v1/cart/items/remove`     | cookie+CSRF | Remove quantity from the cart |
+| Method | Path                            | Auth          | Purpose                       |
+| ------ | ------------------------------- | ------------- | ----------------------------- |
+| GET    | `/health`                       | –             | Liveness probe                |
+| GET    | `/ready`                        | –             | Readiness probe (checks the DB) |
+| POST   | `/api/v1/auth/register`         | –             | Create an account             |
+| POST   | `/api/v1/auth/login`            | –             | Exchange credentials for tokens |
+| POST   | `/api/v1/auth/refresh`          | refresh token | Rotate; returns a new pair    |
+| POST   | `/api/v1/auth/logout`           | refresh token | Revoke this session           |
+| POST   | `/api/v1/auth/logout-all`       | access token  | Revoke every session          |
+| GET    | `/api/v1/auth/session`          | access token  | Resolve the signed-in user    |
+| GET    | `/api/v1/catalog/products`      | –             | Catalog list                  |
+| GET    | `/api/v1/catalog/products/:id`  | –             | Product details               |
+| GET    | `/api/v1/cart`                  | access token  | Cart contents                 |
+| POST   | `/api/v1/cart/items`            | access token  | Add quantity to the cart      |
+| POST   | `/api/v1/cart/items/remove`     | access token  | Remove quantity from the cart |
+| DELETE | `/api/v1/cart`                  | access token  | Empty the cart                |
+
+## Catalog images
+
+Every product ships with a photo of the thing it is named after. The files live in
+`api/src/assets/products`, are copied into the build, and are served straight from the API
+at `/images/products/<slug>.jpg` — no token and no JSON round trip, so an `<img>` tag is
+enough. `credits.json` records the source, author and licence of each file.
+
+`products.image_path` stores that path rather than an absolute URL, so a database seeded on a
+laptop stays correct behind a container or a domain; the API expands it against
+`PUBLIC_BASE_URL` on the way out. A row holding a full `http(s)` URL is passed through
+untouched, which leaves room for pointing at a CDN instead.
+
+To re-pick a photo, edit its entry in `api/tools/image-queries.json` and re-run the fetcher:
+
+```sh
+node api/tools/fetch-product-images.mjs --list "desk lamp"   # see the candidates
+node api/tools/fetch-product-images.mjs --force desk-lamp     # re-download one product
+node api/tools/fetch-product-images.mjs                       # fetch whatever is missing
+```
+
+Search relevance on its own is not enough — it offers a shattered light fixture for "desk
+lamp" — so `--list` prints the candidates and the `file` field pins the one chosen by hand.
 
 ## Shell ↔ remote communication
 
@@ -115,6 +167,9 @@ Remotes never import each other. They exchange typed events over injected channe
 `docker compose up --build` runs the whole stack locally. The `k8s/` manifests and
 `.github/workflows/ci-cd.yml` build images, push them to ECR, and deploy to EKS behind a
 single ELB, where the storefront and the API share an origin.
+
+The API can also be deployed on its own to Railway against a Neon database — see
+[api/README.md](api/README.md#deploying-to-railway).
 
 ## Nx
 

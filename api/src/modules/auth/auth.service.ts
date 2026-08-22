@@ -1,114 +1,182 @@
-import bcrypt from 'bcryptjs';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { config } from '../../config/environment';
-import { conflict, unauthorized } from '../../shared/http-error';
-import * as repository from './auth.repository';
-import type {
-  IssuedSession,
-  LoginInput,
-  RegisterInput,
-  ResolvedSession,
-  SafeUser,
-  UserRow,
-} from './auth.types';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
+import { PrismaService } from '../../prisma/prisma.service';
+import type { LoginDto } from './dto/login.dto';
+import type { RegisterDto } from './dto/register.dto';
+import type { SessionUserDto } from './dto/auth-response.dto';
+import { PasswordService } from './password.service';
+import { IssuedTokens, TokenClientInfo, TokenService } from './token.service';
+import type { RefreshRequestUser } from './strategies/jwt-refresh.strategy';
 
-const PASSWORD_SALT_ROUNDS = 12;
-const TOKEN_BYTES = 32;
-
-function toSafeUser(row: UserRow): SafeUser {
-  return {
-    id: String(row.id),
-    name: row.name,
-    email: row.email,
-    phoneNumber: row.phone_number,
-  };
+export interface AuthResult {
+  user: SessionUserDto;
+  tokens: IssuedTokens;
 }
 
-/**
- * Session tokens are stored as digests only, so a database dump cannot be
- * replayed as a set of live sessions.
- */
-function hashToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex');
-}
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phoneNumber: true,
+  roles: true,
+} as const;
 
-async function issueSession(userId: string): Promise<IssuedSession> {
-  const token = randomBytes(TOKEN_BYTES).toString('hex');
-  const csrfToken = randomBytes(TOKEN_BYTES).toString('hex');
-  const expiresAt = new Date(Date.now() + config.sessionTtlHours * 60 * 60 * 1000);
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
 
-  await repository.insertSession({
-    userId,
-    tokenHash: hashToken(token),
-    csrfToken,
-    expiresAt,
-  });
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly passwords: PasswordService,
+    private readonly tokens: TokenService,
+  ) {}
 
-  return { token, csrfToken };
-}
+  async register(dto: RegisterDto, client: TokenClientInfo): Promise<AuthResult> {
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException('PASSWORD_CONFIRMATION_MISMATCH');
+    }
 
-export async function register(
-  input: RegisterInput,
-): Promise<{ user: SafeUser; session: IssuedSession }> {
-  if (await repository.emailExists(input.email)) {
-    throw conflict('EMAIL_IN_USE');
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException('EMAIL_IN_USE');
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        phoneNumber: dto.phoneNumber,
+        passwordHash: await this.passwords.hash(dto.password),
+      },
+      select: SAFE_USER_SELECT,
+    });
+
+    return { user, tokens: await this.tokens.issueTokens(user, client) };
   }
 
-  const passwordHash = await bcrypt.hash(input.password, PASSWORD_SALT_ROUNDS);
-  const user = toSafeUser(
-    await repository.insertUser({
-      name: input.name,
-      email: input.email,
-      phoneNumber: input.phoneNumber,
-      passwordHash,
-    }),
-  );
+  async login(dto: LoginDto, client: TokenClientInfo): Promise<AuthResult> {
+    const record = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: { ...SAFE_USER_SELECT, passwordHash: true },
+    });
 
-  return { user, session: await issueSession(user.id) };
-}
+    if (!record) {
+      // Spend the same effort as a real verification so a probe cannot tell a
+      // missing account from a wrong password by how long the answer took.
+      await this.passwords.verifyDummy(dto.password);
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
 
-export async function login(
-  input: LoginInput,
-): Promise<{ user: SafeUser; session: IssuedSession }> {
-  const row = await repository.findUserByEmail(input.email);
+    if (!(await this.passwords.verify(record.passwordHash, dto.password))) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
 
-  // Always run a comparison so that a missing account and a wrong password take
-  // a comparable amount of time and cannot be told apart by timing alone.
-  const passwordHash = row?.password_hash ?? '';
-  const passwordMatches = passwordHash
-    ? await bcrypt.compare(input.password, passwordHash)
-    : false;
+    await this.upgradeHashIfNeeded(record.id, record.passwordHash, dto.password);
 
-  if (!row || !passwordMatches) {
-    throw unauthorized('INVALID_CREDENTIALS');
+    const { passwordHash: _passwordHash, ...user } = record;
+    return { user, tokens: await this.tokens.issueTokens(user, client) };
   }
 
-  const user = toSafeUser(row);
-  return { user, session: await issueSession(user.id) };
-}
+  /**
+   * Rotates a refresh token.
+   *
+   * The presented token is verified against its stored Argon2 digest, revoked,
+   * and replaced by a fresh pair in the same family. Presenting a token that is
+   * *already* revoked means someone is replaying an old one, so the whole family
+   * is torn down and both the attacker and the legitimate client are forced to
+   * log in again — the standard response, because there is no way to tell which
+   * of the two is holding the stolen copy.
+   */
+  async refresh(context: RefreshRequestUser, client: TokenClientInfo): Promise<AuthResult> {
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { id: context.tokenId },
+      include: { user: { select: SAFE_USER_SELECT } },
+    });
 
-export async function resolveSession(rawToken: string): Promise<ResolvedSession | null> {
-  const row = await repository.findActiveSessionByTokenHash(hashToken(rawToken));
-  if (!row) {
-    return null;
+    if (!stored || stored.userId !== context.userId) {
+      throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
+    }
+
+    if (stored.revokedAt) {
+      this.logger.warn(
+        `Refresh token reuse detected for user ${stored.userId}; revoking family ${stored.familyId}`,
+      );
+      await this.tokens.revokeFamily(stored.familyId);
+      throw new UnauthorizedException('REFRESH_TOKEN_REUSED');
+    }
+
+    if (stored.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('REFRESH_TOKEN_EXPIRED');
+    }
+
+    if (!(await this.passwords.verify(stored.tokenHash, context.rawToken))) {
+      // A well-formed JWT whose digest does not match means the row was rotated
+      // out from under it; treat it as a replay.
+      await this.tokens.revokeFamily(stored.familyId);
+      throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
+    }
+
+    await this.tokens.revokeToken(stored.id);
+
+    const user = stored.user;
+    return { user, tokens: await this.tokens.issueTokens(user, client, stored.familyId) };
   }
 
-  return { user: toSafeUser(row), csrfToken: row.csrf_token };
-}
-
-export async function revokeSession(rawToken: string): Promise<void> {
-  await repository.deleteSessionByTokenHash(hashToken(rawToken));
-}
-
-export async function purgeExpiredSessions(): Promise<number> {
-  return repository.deleteExpiredSessions();
-}
-
-/** Constant-time comparison so CSRF tokens cannot be guessed byte by byte. */
-export function csrfTokenMatches(expected: string, received: string): boolean {
-  if (!expected || !received || expected.length !== received.length) {
-    return false;
+  /** Ends this one session. Other devices keep their tokens. */
+  async logout(tokenId: string): Promise<void> {
+    await this.tokens.revokeToken(tokenId);
   }
 
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  /** Ends every session for the caller. */
+  async logoutEverywhere(userId: string): Promise<void> {
+    await this.tokens.revokeAllForUser(userId);
+  }
+
+  async findById(userId: string): Promise<AuthenticatedUser> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: SAFE_USER_SELECT,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('UNAUTHORIZED');
+    }
+
+    return user;
+  }
+
+  /**
+   * Re-hashes on a successful login when the stored digest predates the current
+   * Argon2 parameters, so raising the cost factor upgrades accounts silently
+   * instead of needing a password reset.
+   */
+  private async upgradeHashIfNeeded(
+    userId: string,
+    digest: string,
+    plaintext: string,
+  ): Promise<void> {
+    if (!this.passwords.needsRehash(digest)) {
+      return;
+    }
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: await this.passwords.hash(plaintext) },
+      });
+    } catch (error) {
+      // A failed upgrade must never fail the login it rode along with.
+      this.logger.warn(`Could not upgrade password hash for user ${userId}`, error as Error);
+    }
+  }
 }

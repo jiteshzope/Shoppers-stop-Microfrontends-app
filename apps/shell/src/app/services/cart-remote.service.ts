@@ -6,6 +6,7 @@ import {
   CART_EVENT_TYPES,
   REMOTE_SOURCES,
   type CartToShellEvent,
+  type ShellToCartEvent,
 } from '@ecommerce-mf/session';
 import { ShellStore } from '../stores/shell.store';
 
@@ -53,5 +54,22 @@ export class CartRemoteService {
       default:
         console.log('[Shell ← Cart] Unknown event type:', event.type);
     }
+  }
+
+  // ─── Send events to cart remote ─────────────────────────────────────────
+
+  private publishToCart(event: Omit<ShellToCartEvent, 'source' | 'timestamp'>): void {
+    this.cartChannel?.publish({
+      ...event,
+      source: REMOTE_SOURCES.SHELL,
+      timestamp: Date.now(),
+    });
+  }
+
+  /** Tells the cart remote to drop everything tied to the session that just ended. */
+  sendSessionCleared(): void {
+    this.publishToCart({
+      type: CART_EVENT_TYPES.SESSION_CLEARED,
+    });
   }
 }

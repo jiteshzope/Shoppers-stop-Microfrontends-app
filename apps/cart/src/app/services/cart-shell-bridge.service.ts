@@ -34,8 +34,9 @@ export class CartShellBridgeService {
     switch (event.type) {
 
       case CART_EVENT_TYPES.CLEAR_CART:
+      case CART_EVENT_TYPES.SESSION_CLEARED:
         this.clearCartSubject.next();
-        console.log('[Cart ← Shell] Clear cart');
+        console.log('[Cart ← Shell] Clearing cart state:', event.type);
         break;
 
 

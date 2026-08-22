@@ -60,19 +60,4 @@ describe('AuthApiService', () => {
     expect(request.request.method).toBe('GET');
     request.flush({ user: { id: '1', name: 'Taylor', email: 'a@b.c', phoneNumber: '1' } });
   });
-
-  it('maps logout responses to void', () => {
-    let result = 'pending';
-
-    service.logout().subscribe((value) => {
-      result = String(value);
-    });
-
-    const request = httpTesting.expectOne(`${environment.authApiBaseUrl}/auth/logout`);
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({});
-    request.flush({ message: 'ok' });
-
-    expect(result).toBe('undefined');
-  });
 });

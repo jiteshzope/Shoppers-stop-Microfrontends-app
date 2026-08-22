@@ -1,18 +1,52 @@
-import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../../shared/authenticated-request';
-import * as cartService from './cart.service';
-import { parseCartMutationPayload } from './cart.validator';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CartService } from './cart.service';
+import { CartItemDto, CartMutationResultDto } from './dto/cart-item.dto';
+import { CartMutationDto } from './dto/cart-mutation.dto';
 
-export async function listCartItems(req: AuthenticatedRequest, res: Response): Promise<void> {
-  res.status(200).json(await cartService.listCartItems(req.currentUser.id));
-}
+/**
+ * Every cart route belongs to the signed-in shopper. The globally applied
+ * access-token guard covers them; there is no `@Public()` here.
+ */
+@ApiTags('cart')
+@ApiBearerAuth()
+@Controller('cart')
+export class CartController {
+  constructor(private readonly cart: CartService) {}
 
-export async function addCartItem(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const payload = parseCartMutationPayload(req.body);
-  res.status(200).json(await cartService.addCartItem(req.currentUser.id, payload));
-}
+  @Get()
+  @ApiOperation({ summary: "List the caller's cart" })
+  @ApiOkResponse({ type: CartItemDto, isArray: true })
+  listCartItems(@CurrentUser('id') userId: string): Promise<CartItemDto[]> {
+    return this.cart.listCartItems(userId);
+  }
 
-export async function removeCartItem(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const payload = parseCartMutationPayload(req.body);
-  res.status(200).json(await cartService.removeCartItem(req.currentUser.id, payload));
+  @HttpCode(HttpStatus.OK)
+  @Post('items')
+  @ApiOperation({ summary: 'Add units of a product to the cart' })
+  @ApiOkResponse({ type: CartMutationResultDto })
+  addCartItem(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CartMutationDto,
+  ): Promise<CartMutationResultDto> {
+    return this.cart.addCartItem(userId, dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('items/remove')
+  @ApiOperation({ summary: 'Remove units of a product from the cart' })
+  @ApiOkResponse({ type: CartMutationResultDto })
+  removeCartItem(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CartMutationDto,
+  ): Promise<CartMutationResultDto> {
+    return this.cart.removeCartItem(userId, dto);
+  }
+
+  @Delete()
+  @ApiOperation({ summary: 'Empty the cart' })
+  clearCart(@CurrentUser('id') userId: string): Promise<{ removed: number }> {
+    return this.cart.clearCart(userId);
+  }
 }

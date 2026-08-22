@@ -3,9 +3,9 @@ import type { SessionUser } from './session-user';
 /**
  * Client-side view of the signed-in user.
  *
- * There is deliberately no token field: the session credential lives only in an
- * httpOnly cookie managed by the API, so it is never present in application
- * state, in storage, or anywhere else a script could reach it.
+ * There is deliberately no token field here: the access token lives in memory
+ * inside `SessionTokenService` and the refresh token in browser storage, so
+ * neither ends up duplicated in component or store state.
  */
 export interface SessionState {
   isAuthenticated: boolean;

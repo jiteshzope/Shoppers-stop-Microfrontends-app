@@ -1,7 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
-import { SESSION_COOKIE_NAMES } from '@ecommerce-mf/session';
+import {
+  REFRESH_TOKEN_STORAGE_KEY,
+  SESSION_API_BASE_URL,
+  SessionTokenService,
+} from '@ecommerce-mf/session';
 import { AUTH_MESSAGES } from '../constants/auth-constants';
 import { AuthApiService, type AuthApiResponse } from '../services/auth-api.service';
 import { AuthShellBridgeService } from '../services/auth-shell-bridge.service';
@@ -13,16 +17,26 @@ const createResponse = (email = 'taylor@example.com'): AuthApiResponse => ({
     name: 'Taylor',
     email,
     phoneNumber: '+12345678901',
+    roles: ['USER'],
   },
+  accessToken: 'access-token',
+  refreshToken: 'refresh-token',
+  expiresIn: 900,
+  tokenType: 'Bearer',
 });
 
-/** The readable CSRF cookie is the only client-visible trace of a session. */
-const giveSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=csrf-token; path=/`;
+/** `/auth/session` answers with the user alone — no tokens are reissued. */
+const createSessionResponse = (email = 'taylor@example.com') => ({
+  user: createResponse(email).user,
+});
+
+/** A stored refresh token is the client-visible trace of a session. */
+const giveStoredSession = (): void => {
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, 'stored-refresh-token');
 };
 
-const clearSessionCookie = (): void => {
-  document.cookie = `${SESSION_COOKIE_NAMES.CSRF}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+const clearStoredSession = (): void => {
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
 describe('AuthStore', () => {
@@ -30,8 +44,12 @@ describe('AuthStore', () => {
   let api: {
     login: ReturnType<typeof vi.fn>;
     register: ReturnType<typeof vi.fn>;
-    logout: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
+  };
+  let session: {
+    adopt: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
   };
   let bridge: {
     publishRemoteReady: ReturnType<typeof vi.fn>;
@@ -42,12 +60,16 @@ describe('AuthStore', () => {
   };
 
   beforeEach(() => {
-    clearSessionCookie();
+    clearStoredSession();
     api = {
       login: vi.fn(),
       register: vi.fn(),
-      logout: vi.fn().mockReturnValue(of(undefined)),
       getSession: vi.fn(),
+    };
+    session = {
+      adopt: vi.fn(),
+      clear: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
     };
     bridge = {
       publishRemoteReady: vi.fn(),
@@ -59,8 +81,11 @@ describe('AuthStore', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: SESSION_API_BASE_URL, useValue: 'http://localhost:3000/api/v1' },
+        
         AuthStore,
         { provide: AuthApiService, useValue: api },
+        { provide: SessionTokenService, useValue: session },
         { provide: AuthShellBridgeService, useValue: bridge },
       ],
     });
@@ -69,12 +94,12 @@ describe('AuthStore', () => {
   });
 
   afterEach(() => {
-    clearSessionCookie();
+    clearStoredSession();
   });
 
   it('restores the session from the API and notifies the shell bridge', async () => {
-    giveSessionCookie();
-    api.getSession.mockReturnValue(of(createResponse()));
+    giveStoredSession();
+    api.getSession.mockReturnValue(of(createSessionResponse()));
 
     await store.initialize();
 
@@ -84,7 +109,7 @@ describe('AuthStore', () => {
     expect(store.user()?.email).toBe('taylor@example.com');
   });
 
-  it('skips the session request entirely when no session cookie is present', async () => {
+  it('skips the session request entirely when nothing has been stored', async () => {
     await store.initialize();
 
     expect(api.getSession).not.toHaveBeenCalled();
@@ -92,9 +117,9 @@ describe('AuthStore', () => {
     expect(bridge.publishLoginSuccess).not.toHaveBeenCalled();
   });
 
-  it('clears stale auth state when the API rejects the session cookie', async () => {
-    giveSessionCookie();
-    api.getSession.mockReturnValue(of(createResponse('jordan@example.com')));
+  it('clears stale auth state when the API rejects the stored session', async () => {
+    giveStoredSession();
+    api.getSession.mockReturnValue(of(createSessionResponse('jordan@example.com')));
     await store.refreshSession();
     expect(store.isAuthenticated()).toBe(true);
 
@@ -179,20 +204,20 @@ describe('AuthStore', () => {
   });
 
   it('revokes the session on the API, clears state, and publishes logout', async () => {
-    giveSessionCookie();
-    api.getSession.mockReturnValue(of(createResponse()));
+    giveStoredSession();
+    api.getSession.mockReturnValue(of(createSessionResponse()));
     await store.initialize();
 
     store.logout();
 
-    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(session.logout).toHaveBeenCalledTimes(1);
     expect(store.isAuthenticated()).toBe(false);
     expect(store.user()).toBeNull();
     expect(bridge.publishLogout).toHaveBeenCalledTimes(1);
   });
 
   it('still clears local state and publishes logout when the API call fails', () => {
-    api.logout.mockReturnValue(throwError(() => new Error('offline')));
+    session.logout.mockRejectedValue(new Error('offline'));
 
     store.logout();
 

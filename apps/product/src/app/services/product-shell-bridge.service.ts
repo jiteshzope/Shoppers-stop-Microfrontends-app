@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { filter } from 'rxjs';
+import { Subject, filter } from 'rxjs';
 import {
   PRODUCT_SHELL_CHANNEL,
   PRODUCT_EVENT_TYPES,
@@ -15,6 +15,10 @@ export class ProductShellBridgeService {
     optional: true,
   });
   private readonly destroyRef = inject(DestroyRef);
+
+  private readonly sessionClearedSubject = new Subject<void>();
+  /** Emits when the shell reports the shopper signed out. */
+  readonly sessionCleared$ = this.sessionClearedSubject.asObservable();
 
   constructor() {
     // Subscribe to events arriving from the shell
@@ -40,6 +44,11 @@ export class ProductShellBridgeService {
 
       case PRODUCT_EVENT_TYPES.FILTER_BY_CATEGORY:
         console.log('[Product ← Shell] Filter by category event received');
+        break;
+
+      case PRODUCT_EVENT_TYPES.SESSION_CLEARED:
+        this.sessionClearedSubject.next();
+        console.log('[Product ← Shell] Session cleared');
         break;
 
       default:
