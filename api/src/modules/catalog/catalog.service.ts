@@ -1,5 +1,6 @@
 import { notFound } from '../../shared/http-error';
 import * as repository from './catalog.repository';
+import { toProductImageUrl } from './product-image';
 import type { ProductDetails, ProductRow, ProductSummary } from './catalog.types';
 
 function toSummary(row: ProductRow): ProductSummary {
@@ -7,7 +8,7 @@ function toSummary(row: ProductRow): ProductSummary {
     id: Number(row.id),
     title: row.title,
     price: Number(row.price),
-    url: row.image_url,
+    url: toProductImageUrl(row.image_url),
   };
 }
 

@@ -1,5 +1,6 @@
 import { notFound } from '../../shared/http-error';
 import * as catalogRepository from '../catalog/catalog.repository';
+import { toProductImageUrl } from '../catalog/product-image';
 import * as repository from './cart.repository';
 import type { CartItem, CartItemRow, CartMutationInput, CartMutationResult } from './cart.types';
 
@@ -10,7 +11,7 @@ function toCartItem(row: CartItemRow): CartItem {
     id: Number(row.id),
     productId: Number(row.product_id),
     title: row.title,
-    url: row.image_url,
+    url: toProductImageUrl(row.image_url),
     quantity: row.quantity,
     price,
     lineTotal: price * row.quantity,

@@ -27,6 +27,12 @@ export interface AppConfig {
   readonly port: number;
   readonly isProduction: boolean;
   readonly corsOrigins: readonly string[];
+  /**
+   * Origin the browser reaches this API on. Product rows store image paths
+   * rather than absolute URLs, so the same database works on any host; this is
+   * what turns them back into links the storefront can load.
+   */
+  readonly publicBaseUrl: string;
   readonly databaseUrl: string;
   readonly sessionTtlHours: number;
   readonly cookie: CookieConfig;
@@ -95,6 +101,7 @@ export function loadConfig(): AppConfig {
   const sessionTtlHours = readNumber('SESSION_TTL_HOURS', 24);
   const sameSite = readSameSite('COOKIE_SAME_SITE', 'lax');
   const secure = readBoolean('COOKIE_SECURE', sameSite === 'none');
+  const port = readNumber('PORT', 3000);
 
   if (sameSite === 'none' && !secure) {
     throw new Error('COOKIE_SAME_SITE="none" requires COOKIE_SECURE="true".');
@@ -102,12 +109,15 @@ export function loadConfig(): AppConfig {
 
   return {
     host: readString('HOST', '0.0.0.0'),
-    port: readNumber('PORT', 3000),
+    port,
     isProduction,
     corsOrigins: readString('CORS_ORIGIN', 'http://localhost:4200')
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
+    // `host` defaults to 0.0.0.0, which is a bind address rather than something
+    // a browser can resolve, so the fallback names localhost explicitly.
+    publicBaseUrl: readString('PUBLIC_BASE_URL', `http://localhost:${port}`).replace(/\/+$/, ''),
     databaseUrl: readString(
       'DATABASE_URL',
       'postgresql://app_user:app_password@localhost:5432/ecommerce',
