@@ -18,7 +18,7 @@ const PRODUCT = {
   title: 'Nordic Ceramic Mug',
   description: 'Stoneware mug with a matte glaze finish.',
   price: new Prisma.Decimal('18.50'),
-  imagePath: '/images/products/nordic-ceramic-mug.jpg',
+  imageUrl: 'https://i.postimg.cc/vBXTvDx7/nordic-ceramic-mug.jpg',
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -88,7 +88,7 @@ describe('Storefront API (e2e)', () => {
           slug: 'nordic-ceramic-mug',
           title: 'Nordic Ceramic Mug',
           price: 18.5,
-          url: 'https://api.example.com/images/products/nordic-ceramic-mug.jpg',
+          url: 'https://i.postimg.cc/vBXTvDx7/nordic-ceramic-mug.jpg',
         },
       ]);
     });

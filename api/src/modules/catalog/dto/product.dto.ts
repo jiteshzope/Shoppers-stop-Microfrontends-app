@@ -14,7 +14,7 @@ export class ProductSummaryDto {
   @ApiProperty({ example: 79 })
   price!: number;
 
-  @ApiProperty({ example: 'http://localhost:3000/images/products/classic-leather-backpack.jpg' })
+  @ApiProperty({ example: 'https://i.postimg.cc/wv93JDM1/classic-leather-backpack.jpg' })
   url!: string;
 }
 

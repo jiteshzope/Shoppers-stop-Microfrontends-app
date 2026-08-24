@@ -1,7 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Prisma, type CartItem, type Product } from '@prisma/client';
 import { CartService } from './cart.service';
-import type { AppConfigService } from '../../config/app-config.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 const USER_ID = 'e6b0c1a2-0000-4000-8000-000000000001';
@@ -12,7 +11,7 @@ const PRODUCT = {
   title: 'Nordic Ceramic Mug',
   description: 'Stoneware mug.',
   price: new Prisma.Decimal('18.50'),
-  imagePath: '/images/products/nordic-ceramic-mug.jpg',
+  imageUrl: 'https://i.postimg.cc/vBXTvDx7/nordic-ceramic-mug.jpg',
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -62,12 +61,7 @@ describe('CartService', () => {
       $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
     };
 
-    cart = new CartService(
-      prisma as unknown as PrismaService,
-      {
-        publicBaseUrl: 'https://api.example.com',
-      } as AppConfigService,
-    );
+    cart = new CartService(prisma as unknown as PrismaService);
   });
 
   describe('listCartItems', () => {
@@ -78,7 +72,7 @@ describe('CartService', () => {
 
       expect(item.price).toBe(18.5);
       expect(item.lineTotal).toBe(55.5);
-      expect(item.url).toBe('https://api.example.com/images/products/nordic-ceramic-mug.jpg');
+      expect(item.url).toBe('https://i.postimg.cc/vBXTvDx7/nordic-ceramic-mug.jpg');
     });
   });
 

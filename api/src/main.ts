@@ -12,13 +12,10 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AppConfigService } from './config/app-config.service';
-import { PRODUCT_IMAGES_DIR, PRODUCT_IMAGES_ROUTE } from './modules/catalog/product-image';
 import { TokenService } from './modules/auth/token.service';
 
 const API_PREFIX = 'api/v1';
 const JSON_BODY_LIMIT = '100kb';
-/** Catalogue photos ship with the build and never change between deploys. */
-const IMAGE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function bootstrap(): Promise<void> {
   // Logs stream as they are written. Nothing here attaches a custom logger, so
@@ -63,15 +60,6 @@ async function bootstrap(): Promise<void> {
     // Probes answer at /health and /ready so a platform check needs no
     // knowledge of the versioning scheme.
     exclude: ['health', 'ready'],
-  });
-
-  // Served without the API prefix and without credentials, so an <img> tag needs
-  // no token, no CORS preflight and no JSON round trip to fetch a photo.
-  app.useStaticAssets(PRODUCT_IMAGES_DIR, {
-    prefix: PRODUCT_IMAGES_ROUTE,
-    maxAge: IMAGE_CACHE_MAX_AGE_MS,
-    immutable: true,
-    fallthrough: false,
   });
 
   if (config.swaggerEnabled) {

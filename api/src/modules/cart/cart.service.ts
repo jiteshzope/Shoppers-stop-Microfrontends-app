@@ -1,8 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { CartItem, Product } from '@prisma/client';
-import { AppConfigService } from '../../config/app-config.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { toProductImageUrl } from '../catalog/product-image';
 import type { CartItemDto, CartMutationResultDto } from './dto/cart-item.dto';
 import type { CartMutationDto } from './dto/cart-mutation.dto';
 
@@ -10,10 +8,7 @@ type CartItemWithProduct = CartItem & { product: Product };
 
 @Injectable()
 export class CartService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: AppConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async listCartItems(userId: string): Promise<CartItemDto[]> {
     const items = await this.prisma.cartItem.findMany({
@@ -108,7 +103,7 @@ export class CartService {
       id: item.id,
       productId: item.productId,
       title: item.product.title,
-      url: toProductImageUrl(this.config.publicBaseUrl, item.product.imagePath),
+      url: item.product.imageUrl,
       quantity: item.quantity,
       price,
       lineTotal: Number((price * item.quantity).toFixed(2)),

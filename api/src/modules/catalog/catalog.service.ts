@@ -1,16 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Product } from '@prisma/client';
-import { AppConfigService } from '../../config/app-config.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { ProductDetailsDto, ProductSummaryDto } from './dto/product.dto';
-import { toProductImageUrl } from './product-image';
 
 @Injectable()
 export class CatalogService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: AppConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async listProducts(): Promise<ProductSummaryDto[]> {
     const products = await this.prisma.product.findMany({ orderBy: { id: 'asc' } });
@@ -41,7 +36,7 @@ export class CatalogService {
       // `Decimal` keeps full precision in the database; the wire format is a
       // plain number because that is what the storefront arithmetic expects.
       price: product.price.toNumber(),
-      url: toProductImageUrl(this.config.publicBaseUrl, product.imagePath),
+      url: product.imageUrl,
     };
   }
 }
