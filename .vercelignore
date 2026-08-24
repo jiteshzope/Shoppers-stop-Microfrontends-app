@@ -1,0 +1,5 @@
+# api/ is deployed separately on Railway, never through Vercel. Left visible
+# at the repo root, Vercel's zero-config detection treats every .ts file in
+# it as its own Serverless Function, which blows past the Hobby plan's
+# 12-function cap on each of the 4 micro-frontend deployments.
+api
