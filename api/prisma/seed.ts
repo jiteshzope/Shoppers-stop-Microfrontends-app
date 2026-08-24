@@ -4,9 +4,6 @@ import { SEED_PRODUCTS } from './products';
 
 const prisma = new PrismaClient();
 
-/** Matches PRODUCT_IMAGES_ROUTE in src/modules/catalog/product-image.ts. */
-const PRODUCT_IMAGES_ROUTE = '/images/products';
-
 /**
  * Optional demo accounts. Both are skipped unless the matching password is
  * supplied, so a production seed never creates a login nobody asked for.
@@ -34,7 +31,7 @@ async function seedProducts(): Promise<number> {
       title: product.title,
       description: product.description,
       price: product.price,
-      imagePath: `${PRODUCT_IMAGES_ROUTE}/${product.slug}.jpg`,
+      imageUrl: product.imageUrl,
     };
 
     // Upserted by slug so re-running the seed refreshes copy and pricing
