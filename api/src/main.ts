@@ -21,9 +21,10 @@ const JSON_BODY_LIMIT = '100kb';
 const IMAGE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    bufferLogs: true,
-  });
+  // Logs stream as they are written. Nothing here attaches a custom logger, so
+  // buffering them bought nothing and cost the ability to see why a boot that
+  // never reaches `listen()` stalled.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const config = app.get(AppConfigService);
   const logger = new Logger('Bootstrap');
@@ -92,16 +93,26 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
-  // Rows that have already expired can no longer be replayed, so clearing them
-  // on boot keeps the table from growing without bound on a long-lived deploy.
-  await app.get(TokenService).purgeExpiredTokens();
-
   await app.listen(config.port, config.host);
 
   logger.log(`API ready on http://${config.host}:${config.port}/${API_PREFIX}`);
   if (config.swaggerEnabled) {
     logger.log(`OpenAPI explorer on http://${config.host}:${config.port}/docs`);
   }
+
+  // Rows that have already expired can no longer be replayed, so clearing them
+  // on boot keeps the table from growing without bound on a long-lived deploy.
+  // It is housekeeping rather than a startup precondition, so it runs once the
+  // port is already open: a slow or unreachable database costs a log line here
+  // instead of keeping the liveness probe from ever being answered.
+  void app
+    .get(TokenService)
+    .purgeExpiredTokens()
+    .catch((error: unknown) => {
+      logger.warn(
+        `Could not purge expired refresh tokens: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 }
 
 void bootstrap().catch((error: unknown) => {
