@@ -48,4 +48,5 @@ vitest.config.*.timestamp*
 
 # local/runtime secrets
 api/.env
+apps/*/.env
 k8s/secrets.yaml
