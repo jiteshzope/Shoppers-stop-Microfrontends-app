@@ -39,6 +39,18 @@
         "^production",
         {
           "env": "NX_MF_DEV_REMOTES"
+        },
+        {
+          "env": "NX_PUBLIC_API_BASE_URL"
+        },
+        {
+          "env": "NX_PUBLIC_PRODUCT_REMOTE_URL"
+        },
+        {
+          "env": "NX_PUBLIC_CART_REMOTE_URL"
+        },
+        {
+          "env": "NX_PUBLIC_AUTH_REMOTE_URL"
         }
       ]
     },
