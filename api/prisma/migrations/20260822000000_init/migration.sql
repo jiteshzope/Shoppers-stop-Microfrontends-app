@@ -40,7 +40,7 @@ CREATE TABLE "products" (
     "title" VARCHAR(200) NOT NULL,
     "description" TEXT NOT NULL,
     "price" DECIMAL(10,2) NOT NULL,
-    "image_path" TEXT NOT NULL,
+    "image_url" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
