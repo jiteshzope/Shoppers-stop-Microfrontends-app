@@ -1,3 +1,4 @@
+import { Configuration, DefinePlugin } from 'webpack';
 import { withModuleFederation } from '@nx/module-federation/angular';
 import config from './module-federation.config';
 
@@ -21,4 +22,13 @@ export default withModuleFederation(
      */
   },
   { dts: false },
-);
+).then((configFn) => (webpackConfig: Configuration) => {
+  const updatedConfig = configFn(webpackConfig);
+  updatedConfig.plugins.push(
+    new DefinePlugin({
+      // Baked into the bundle at build time so Vercel's env vars reach the browser.
+      'process.env.NX_PUBLIC_API_BASE_URL': JSON.stringify(process.env['NX_PUBLIC_API_BASE_URL'] ?? ''),
+    }),
+  );
+  return updatedConfig;
+});

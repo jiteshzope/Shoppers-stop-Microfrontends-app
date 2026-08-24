@@ -1,3 +1,4 @@
+import { Configuration, DefinePlugin } from 'webpack';
 import { withModuleFederation } from '@nx/module-federation/angular';
 import config from './module-federation.config';
 
@@ -9,11 +10,21 @@ import config from './module-federation.config';
 export default withModuleFederation(
   {
     ...config,
+    // Each remote is deployed as its own Vercel app; Nx appends /remoteEntry.mjs itself.
     remotes: [
-      ['product', 'http://a5d10a03df4854b31852097b4df725ec-1461367908.us-east-1.elb.amazonaws.com/product-remote/remoteEntry.mjs'],
-      ['cart',    'http://a5d10a03df4854b31852097b4df725ec-1461367908.us-east-1.elb.amazonaws.com/cart-remote/remoteEntry.mjs'],
-      ['auth',    'http://a5d10a03df4854b31852097b4df725ec-1461367908.us-east-1.elb.amazonaws.com/auth-remote/remoteEntry.mjs'],
+      ['product', process.env['NX_PUBLIC_PRODUCT_REMOTE_URL'] ?? ''],
+      ['cart', process.env['NX_PUBLIC_CART_REMOTE_URL'] ?? ''],
+      ['auth', process.env['NX_PUBLIC_AUTH_REMOTE_URL'] ?? ''],
     ],
   },
   { dts: false },
-);
+).then((configFn) => (webpackConfig: Configuration) => {
+  const updatedConfig = configFn(webpackConfig);
+  updatedConfig.plugins.push(
+    new DefinePlugin({
+      // Baked into the bundle at build time so Vercel's env vars reach the browser.
+      'process.env.NX_PUBLIC_API_BASE_URL': JSON.stringify(process.env['NX_PUBLIC_API_BASE_URL'] ?? ''),
+    }),
+  );
+  return updatedConfig;
+});
