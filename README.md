@@ -29,8 +29,7 @@ The app is then on <http://localhost:4200> and the API on <http://localhost:3000
 
 Copy `api/.env.example` to `api/.env` and fill in the two JWT secrets; every variable is
 documented there. If port 3000 or 5432 is already taken, set `PORT` / `DATABASE_URL`
-accordingly, match `PUBLIC_BASE_URL` to the new port so product images still resolve, and
-update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
+accordingly and update `localApiBaseUrl` in `apps/*/src/environments/environment.ts`.
 
 See [api/README.md](api/README.md) for the API's own scripts, configuration and the
 Railway + Neon deployment steps.
@@ -134,26 +133,18 @@ An OpenAPI explorer is served at `/docs`.
 
 ## Catalog images
 
-Every product ships with a photo of the thing it is named after. The files live in
-`api/src/assets/products`, are copied into the build, and are served straight from the API
-at `/images/products/<slug>.jpg` — no token and no JSON round trip, so an `<img>` tag is
-enough. `credits.json` records the source, author and licence of each file.
+Every product has a photo of the thing it is named after, hosted externally and referenced
+by absolute URL. `products.image_url` holds that URL and the API returns it verbatim as the
+`url` field on catalogue and cart responses, so an `<img>` tag needs no token and the
+storefront never round-trips through the API for a binary.
 
-`products.image_path` stores that path rather than an absolute URL, so a database seeded on a
-laptop stays correct behind a container or a domain; the API expands it against
-`PUBLIC_BASE_URL` on the way out. A row holding a full `http(s)` URL is passed through
-untouched, which leaves room for pointing at a CDN instead.
+The URLs live next to the copy and pricing in `api/prisma/products.ts`, one `imageUrl` per
+product, and the seed writes them straight through. To swap a photo, upload the replacement
+to the image host and edit that one line — nothing else in the API knows or cares where the
+file is served from.
 
-To re-pick a photo, edit its entry in `api/tools/image-queries.json` and re-run the fetcher:
-
-```sh
-node api/tools/fetch-product-images.mjs --list "desk lamp"   # see the candidates
-node api/tools/fetch-product-images.mjs --force desk-lamp     # re-download one product
-node api/tools/fetch-product-images.mjs                       # fetch whatever is missing
-```
-
-Search relevance on its own is not enough — it offers a shattered light fixture for "desk
-lamp" — so `--list` prints the candidates and the `file` field pins the one chosen by hand.
+Because the API hosts no image files, it ships no `assets` directory and serves no static
+image route; the container image is ~3.5 MB smaller for it.
 
 ## Shell ↔ remote communication
 

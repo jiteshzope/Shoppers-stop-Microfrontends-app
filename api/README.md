@@ -14,7 +14,7 @@ prisma/
   seed.ts                idempotent catalogue seed
   products.ts            the 26 reference products
 src/
-  main.ts                bootstrap: Helmet, CORS, validation, static images, Swagger
+  main.ts                bootstrap: Helmet, CORS, validation, Swagger
   app.module.ts          global guards, filter and rate limiting
   config/                environment validation and a typed accessor for it
   prisma/                the shared PrismaClient
@@ -24,7 +24,6 @@ src/
     catalog/             products
     cart/                cart lines
     health/              /health and /ready
-  assets/products/       the catalogue photos, copied into dist by the build
 ```
 
 ## Running locally
@@ -122,7 +121,6 @@ All under `/api/v1` except the probes.
 | `DELETE` | `/cart` | access token | Empty the cart |
 | `GET` | `/health` | — | Liveness; never touches the database |
 | `GET` | `/ready` | — | Readiness; checks the database |
-| `GET` | `/images/products/*.jpg` | — | Catalogue photos |
 
 Failures all share one shape:
 
@@ -158,8 +156,8 @@ Railway builds this folder, and Neon holds the database.
    Railway runs `npm ci` and `npm run build` on its own. `migrate deploy`
    applies any pending migration before the process starts, so a deploy that
    adds a column cannot serve traffic against the old schema.
-4. **Settings → Networking → Generate Domain**, then set `PUBLIC_BASE_URL` to
-   the domain it hands you.
+4. **Settings → Networking → Generate Domain** so the storefront has a host to
+   call.
 5. **Variables:**
 
    ```
@@ -168,7 +166,6 @@ Railway builds this folder, and Neon holds the database.
    JWT_ACCESS_SECRET=<openssl rand -base64 48>
    JWT_REFRESH_SECRET=<a different one>
    CORS_ORIGIN=https://your-shell.app,https://your-product.app,https://your-cart.app,https://your-auth.app
-   PUBLIC_BASE_URL=https://<your-service>.up.railway.app
    COOKIE_SECURE=true
    COOKIE_SAME_SITE=none
    SWAGGER_ENABLED=false
