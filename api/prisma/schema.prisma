@@ -66,9 +66,9 @@ model Product {
   title       String   @db.VarChar(200)
   description String
   price       Decimal  @db.Decimal(10, 2)
-  /// Path such as `/images/products/nordic-ceramic-mug.jpg`, expanded against
-  /// PUBLIC_BASE_URL on the way out so the same rows work on any host.
-  imagePath   String   @map("image_path")
+  /// Absolute URL of the product photo on the image host. Served to clients
+  /// verbatim, so the API hosts no image binaries of its own.
+  imageUrl    String   @map("image_url")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
