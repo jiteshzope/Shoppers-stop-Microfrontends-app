@@ -52,16 +52,6 @@ export class AppConfigService {
       .filter(Boolean);
   }
 
-  /**
-   * Origin the browser reaches this API on. `HOST` defaults to 0.0.0.0, which
-   * is a bind address rather than something a browser can resolve, so the
-   * fallback names localhost explicitly.
-   */
-  get publicBaseUrl(): string {
-    const configured = this.get('PUBLIC_BASE_URL').trim();
-    return (configured || `http://localhost:${this.port}`).replace(/\/+$/, '');
-  }
-
   get accessTokenSecret(): string {
     return this.get('JWT_ACCESS_SECRET');
   }

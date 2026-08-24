@@ -26,7 +26,6 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       CORS_ORIGIN: http://localhost:4200
-      PUBLIC_BASE_URL: http://localhost:3000
       NODE_ENV: production
       COOKIE_SECURE: "false"
       COOKIE_SAME_SITE: lax

@@ -70,9 +70,6 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   CORS_ORIGIN = 'http://localhost:4200';
 
-  @IsString()
-  PUBLIC_BASE_URL = '';
-
   @IsBoolean()
   @Transform(toBoolean)
   SWAGGER_ENABLED = true;
